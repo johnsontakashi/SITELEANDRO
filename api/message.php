@@ -1,7 +1,22 @@
 <?php
 // api/message.php
+session_start();
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-cache, no-store, must-revalidate');
+
+// Authentication check for POST operations
+function validate_session(): bool {
+  $SESSION_TIMEOUT = 3600; // 1 hour
+  if (!isset($_SESSION['user_id']) || !isset($_SESSION['last_activity'])) {
+    return false;
+  }
+  if (time() - $_SESSION['last_activity'] > $SESSION_TIMEOUT) {
+    session_destroy();
+    return false;
+  }
+  $_SESSION['last_activity'] = time();
+  return true;
+}
 
 $FILE = __DIR__ . '/../data/message.json';
 
@@ -35,10 +50,11 @@ if ($method === 'GET') {
   j(true, $json);
 }
 
-// POST => atualiza mensagem (requer token)
+// POST => atualiza mensagem (requer autenticação)
 if ($method === 'POST') {
-  $token = $_SERVER['HTTP_X_ADMIN_TOKEN'] ?? '';
-  if ($token !== $ADMIN_TOKEN) j(false, null, 'Não autorizado', 401);
+  if (!validate_session()) {
+    j(false, null, 'Autenticação necessária', 401);
+  }
 
   // aceita JSON ou multipart
   $input = file_get_contents('php://input');

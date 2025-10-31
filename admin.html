@@ -22,6 +22,30 @@
 </head>
 <body>
 
+  <!-- ========== LOGIN MODAL ========== -->
+  <div id="loginModal" class="login-modal" style="display: none;">
+    <div class="login-content">
+      <div class="login-header">
+        <h2>Acesso Administrativo</h2>
+        <p>Entre com suas credenciais para acessar o painel</p>
+      </div>
+      <form id="loginForm" class="login-form">
+        <div class="form-group">
+          <label for="username">Usuário:</label>
+          <input type="text" id="username" name="username" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="password">Senha:</label>
+          <input type="password" id="password" name="password" required autocomplete="current-password">
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Entrar</button>
+        </div>
+        <div id="loginError" class="error-message" style="display: none;"></div>
+      </form>
+    </div>
+  </div>
+
   <!-- ========== SIDEBAR ESQUERDA (CONFIG / LISTAS) ========== -->
   <aside class="sidebar" aria-label="Barra lateral">
 

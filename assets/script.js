@@ -32,6 +32,116 @@ const statusEl = $("#statusText"),
       coordsEl = $("#coordinates");
 const loadingEl = $("#loadingOverlay"),
       loadingTxt = $("#loadingText");
+
+// Security utilities
+function escapeHtml(unsafe) {
+  if (typeof unsafe !== 'string') return '';
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function safeSetInnerHTML(element, content) {
+  if (!element) return;
+  // Simple whitelist of allowed HTML tags
+  const allowedTags = /<\/?(?:b|strong|i|em|small|br|span)\b[^>]*>/gi;
+  const sanitized = content.replace(/<(?!\/?(?:b|strong|i|em|small|br|span)\b)[^>]*>/gi, '');
+  element.innerHTML = sanitized;
+}
+
+function safeSetTextContent(element, content) {
+  if (!element) return;
+  element.textContent = typeof content === 'string' ? content : String(content || '');
+}
+
+// Better user feedback instead of alerts
+function showToast(message, type = 'info', duration = 5000) {
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.setAttribute('role', 'alert');
+  toast.setAttribute('aria-live', 'polite');
+  
+  const icon = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : 'ℹ️';
+  safeSetInnerHTML(toast, `<span class="toast-icon">${icon}</span><span class="toast-message">${escapeHtml(message)}</span>`);
+  
+  // Add to DOM
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+  
+  container.appendChild(toast);
+  
+  // Show with animation
+  setTimeout(() => toast.classList.add('show'), 100);
+  
+  // Auto-hide
+  setTimeout(() => {
+    toast.classList.add('hide');
+    setTimeout(() => {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 300);
+  }, duration);
+}
+
+function showConfirm(message, onConfirm, onCancel = null) {
+  const modal = document.createElement('div');
+  modal.className = 'confirm-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  
+  const content = document.createElement('div');
+  content.className = 'confirm-content';
+  safeSetInnerHTML(content, `
+    <div class="confirm-header">
+      <h3>Confirmação</h3>
+    </div>
+    <div class="confirm-body">
+      <p>${escapeHtml(message)}</p>
+    </div>
+    <div class="confirm-footer">
+      <button class="btn btn-secondary confirm-cancel">Cancelar</button>
+      <button class="btn btn-primary confirm-ok">Confirmar</button>
+    </div>
+  `);
+  
+  modal.appendChild(content);
+  document.body.appendChild(modal);
+  
+  const cancelBtn = content.querySelector('.confirm-cancel');
+  const okBtn = content.querySelector('.confirm-ok');
+  
+  const cleanup = () => {
+    if (modal.parentNode) modal.parentNode.removeChild(modal);
+  };
+  
+  cancelBtn.addEventListener('click', () => {
+    cleanup();
+    if (onCancel) onCancel();
+  });
+  
+  okBtn.addEventListener('click', () => {
+    cleanup();
+    if (onConfirm) onConfirm();
+  });
+  
+  // Close on backdrop click
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      cleanup();
+      if (onCancel) onCancel();
+    }
+  });
+  
+  // Focus the confirm button
+  setTimeout(() => okBtn.focus(), 100);
+}
 // SUBSTITUIR a sua setStatus por esta:
 // Máximo de 40 caracteres no rodapé
 const MAX_STATUS_LEN = 40;
@@ -593,7 +703,7 @@ function renderResults(items) {
   if (!searchResults) return;
   searchResults.innerHTML = "";
   if (!items.length) {
-    searchResults.innerHTML = `<div class="search-item" style="opacity:.7;cursor:default">Nenhum resultado</div>`;
+    safeSetInnerHTML(searchResults, `<div class="search-item" style="opacity:.7;cursor:default">Nenhum resultado</div>`);
     showResults(true);
     return;
   }
@@ -604,7 +714,7 @@ function renderResults(items) {
     const icon = it.icon || (it.type?.includes("city") || it.type === "PPL" ? "🏙️" : "📍");
     const title = it.title || it.name;
     const subtitle = it.subtitle || it.desc || (it.name || "");
-    div.innerHTML = `<b>${icon} ${title}</b>${subtitle ? `<br><small>${subtitle}</small>` : ""}`;
+    safeSetInnerHTML(div, `<b>${escapeHtml(icon)} ${escapeHtml(title)}</b>${subtitle ? `<br><small>${escapeHtml(subtitle)}</small>` : ""}`);
     div.addEventListener("click", () => {
       if (it.kind) flyToLocal(it); else flyToResult(it);
     });
@@ -805,14 +915,14 @@ function renderLayersPanelLines() {
   if (!layersListLines) return;
   layersListLines.innerHTML = "";
   if (!order.length) {
-    layersListLines.innerHTML = `<div class="empty"><div class="empty-ico">🗂️</div><p>Nenhuma camada carregada</p></div>`;
+    safeSetInnerHTML(layersListLines, `<div class="empty"><div class="empty-ico">🗂️</div><p>Nenhuma camada carregada</p></div>`);
     return;
   }
   order.forEach((name) => {
     const color = colors[name];
     const row = document.createElement("label");
     row.className = "layer-item";
-    row.innerHTML = `<input type="checkbox" checked data-af="${name}"><span class="layer-color" style="background:${color}"></span><span class="layer-name">${name}</span>`;
+    safeSetInnerHTML(row, `<input type="checkbox" checked data-af="${escapeHtml(name)}"><span class="layer-color" style="background:${escapeHtml(color)}"></span><span class="layer-name">${escapeHtml(name)}</span>`);
     const cb = row.querySelector("input");
     cb.onchange = () => {
       if (cb.checked) {
@@ -830,14 +940,14 @@ function renderLayersPanelPosts() {
   if (!layersListPosts) return;
   layersListPosts.innerHTML = "";
   if (!postOrder.length) {
-    layersListPosts.innerHTML = `<div class="empty"><div class="empty-ico">📍</div><p>Nenhum posto</p></div>`;
+    safeSetInnerHTML(layersListPosts, `<div class="empty"><div class="empty-ico">📍</div><p>Nenhum posto</p></div>`);
     return;
   }
   postOrder.forEach((gname) => {
     const color = POST_COLORS[gname] || POST_COLORS.OUTROS;
     const row = document.createElement("label");
     row.className = "layer-item";
-    row.innerHTML = `<input type="checkbox" checked data-pg="${gname}"><span class="layer-color" style="background:${color}"></span><span class="layer-name">${gname}</span>`;
+    safeSetInnerHTML(row, `<input type="checkbox" checked data-pg="${escapeHtml(gname)}"><span class="layer-color" style="background:${escapeHtml(color)}"></span><span class="layer-name">${escapeHtml(gname)}</span>`);
     const cb = row.querySelector("input");
     cb.onchange = () => cb.checked ? postGroups[gname].addTo(map) : map.removeLayer(postGroups[gname]);
     layersListPosts.appendChild(row);
@@ -1404,7 +1514,299 @@ if (window.__afterPublishFlyTarget) {
   }
 }
 
-/* ----------------- KMZ loader ----------------- */
+/* ----------------- Optimized KML parser with progressive rendering ----------------- */
+async function parseKMLOptimized(text, cityHint = "") {
+  const groupBounds = {};
+  const boundsLines = L.latLngBounds();
+  const MIN_START_ZOOM = 12;
+  const seenLines = new Set();
+
+  showLoading(true, `Preparando ${cityHint || "mapa"}…`);
+
+  try {
+    const xml = new DOMParser().parseFromString(text, "text/xml");
+    if (xml.querySelector("parsererror")) throw new Error("XML inválido");
+
+    // Clear existing data
+    if (published) { 
+      try { map.removeLayer(published); } catch {} 
+    }
+    resetGroups();
+
+    published = L.layerGroup().addTo(map);
+
+    localIndex.points = [];
+    localIndex.groups = [];
+    stats = { markers: 0, lines: 0, polygons: 0 };
+
+    // Setup progressive containers
+    if (hasCluster) {
+      lod.keysContainer = L.markerClusterGroup({
+        chunkedLoading: true,
+        disableClusteringAtZoom: Z_MARKERS_ON + 2,
+        spiderfyOnMaxZoom: false,
+        showCoverageOnHover: false
+      });
+    } else {
+      lod.keysRawGroup = L.layerGroup();
+      lod.keysContainer = lod.keysRawGroup;
+    }
+    lod.keysVisible = false;
+    lod.blockMarkersUntilZoom = true;
+
+    const placemarks = Array.from(xml.querySelectorAll("Placemark"));
+    if (!placemarks.length) throw new Error("Sem Placemark");
+
+    // Progressive parsing with smaller chunks and yield points
+    const keyIndex = [];
+    const BATCH_SIZE = 200; // Smaller batches for better responsiveness
+    const YIELD_INTERVAL = 25; // Yield to browser every 25 items
+    
+    let processed = 0;
+    const total = placemarks.length;
+
+    // First pass: quickly render essential lines for immediate feedback
+    setStatus && setStatus(`Carregando linhas principais…`);
+    
+    for (let i = 0; i < placemarks.length; i += BATCH_SIZE) {
+      const batch = placemarks.slice(i, i + BATCH_SIZE);
+      
+      for (let j = 0; j < batch.length; j++) {
+        const pm = batch[j];
+        
+        // Yield control periodically
+        if ((processed % YIELD_INTERVAL) === 0) {
+          await new Promise(resolve => setTimeout(resolve, 1));
+          const pct = Math.round((processed / total) * 50); // First 50% for lines
+          showLoading(true, `Linhas (${pct}%)…`);
+        }
+        
+        // Process lines first (most important for context)
+        const lineNodes = pm.querySelectorAll(":scope > LineString > coordinates, MultiGeometry LineString coordinates");
+        if (lineNodes.length) {
+          processLineStringOptimized(pm, lineNodes, groupBounds, boundsLines, seenLines, keyIndex);
+          stats.lines++;
+        }
+        
+        processed++;
+      }
+    }
+
+    // Second pass: add points progressively
+    setStatus && setStatus(`Carregando postos…`);
+    processed = 0;
+    
+    for (let i = 0; i < placemarks.length; i += BATCH_SIZE) {
+      const batch = placemarks.slice(i, i + BATCH_SIZE);
+      
+      for (let j = 0; j < batch.length; j++) {
+        const pm = batch[j];
+        
+        if ((processed % YIELD_INTERVAL) === 0) {
+          await new Promise(resolve => setTimeout(resolve, 1));
+          const pct = 50 + Math.round((processed / total) * 40); // 50-90%
+          showLoading(true, `Postos (${pct}%)…`);
+        }
+        
+        // Process points
+        const point = pm.querySelector(":scope > Point > coordinates");
+        if (point) {
+          processPointOptimized(pm, point, keyIndex);
+          stats.markers++;
+        }
+        
+        // Process polygons
+        const polygonNodes = pm.querySelectorAll(":scope > Polygon coordinates, MultiGeometry Polygon coordinates");
+        if (polygonNodes.length) {
+          processPolygonOptimized(pm, polygonNodes, groupBounds, boundsLines);
+          stats.polygons++;
+        }
+        
+        processed++;
+      }
+    }
+
+    // Final setup
+    setStatus && setStatus(`Finalizando…`);
+    
+    // Add containers to map
+    Object.entries(lineGroups).forEach(([name, group]) => {
+      if (group.getLayers().length > 0) {
+        published.addLayer(group);
+        
+        if (groupBounds[name]) {
+          localIndex.groups.push({
+            name: name,
+            lat: groupBounds[name].getCenter().lat,
+            lon: groupBounds[name].getCenter().lng,
+            bbox: groupBounds[name]
+          });
+        }
+      }
+    });
+
+    Object.entries(postGroups).forEach(([name, group]) => {
+      if (group.getLayers().length > 0) {
+        published.addLayer(group);
+      }
+    });
+
+    // Setup progressive marker loading
+    map.once('zoomend', () => { lod.blockMarkersUntilZoom = false; updateLOD(); });
+    updateLOD();
+    updatePostLabels();
+
+    setStatus && setStatus(`✅ ${stats.markers} postos | ${stats.lines} linhas | ${stats.polygons} polígonos`);
+    
+    // Fit bounds with animation
+    if (map && boundsLines.isValid()) {
+      map.fitBounds(boundsLines, { 
+        padding: [20, 20],
+        animate: true,
+        duration: 1.0
+      });
+    }
+
+    // Refresh controls
+    rebuildLayersControls();
+    rebuildPostsControls();
+    updateStats();
+    
+    // Handle post-publish location target
+    if (window.__afterPublishFlyTarget) {
+      const { lat, lng, accuracy } = window.__afterPublishFlyTarget;
+      const targetZ = Math.max(map.getZoom(), 18);
+      map.flyTo([lat, lng], targetZ, { duration: 0.7 });
+      drawMeAt(lat, lng, accuracy);
+      window.__afterPublishFlyTarget = null;
+    }
+    
+  } catch (err) {
+    console.error("Parse error:", err);
+    setStatus(`❌ Erro: ${err.message}`);
+    throw err;
+  } finally {
+    showLoading(false);
+  }
+}
+
+// Helper functions for optimized processing
+function processLineStringOptimized(pm, lineNodes, groupBounds, boundsLines, seenLines, keyIndex) {
+  const rawName = pm.querySelector("name")?.textContent?.trim() || `Linha`;
+  const alim = getAlim(pm);
+  
+  lineNodes.forEach(ls => {
+    const coordsRaw = parseCoordBlock(ls.textContent);
+    const coords = simplifyPathMeters(coordsRaw);
+    
+    if (coords.length > 1) {
+      const ctr = centroidLatLng(coords);
+      const grp = decideGroupForGeometry(pm, ctr, keyIndex);
+      const signature = coords.map(c => `${c[0].toFixed(5)},${c[1].toFixed(5)}`).join(';');
+      
+      if (seenLines.has(signature)) return;
+      seenLines.add(signature);
+      
+      if (!lineGroups[grp]) {
+        lineGroups[grp] = L.layerGroup();
+        layerOrder.push(grp);
+      }
+      
+      const line = L.polyline(coords, {
+        color: LINE_COLORS[grp] || '#888',
+        weight: LINE_BASE_W,
+        smoothFactor: LINE_SMOOTH,
+        className: `line-layer line-${grp.toLowerCase().replace(/\s+/g, '-')}`
+      });
+      
+      const tooltip = `<b>${rawName}</b>`;
+      line.bindTooltip(tooltip, { sticky: true, direction: 'auto' });
+      
+      lineGroups[grp].addLayer(line);
+      
+      coords.forEach(coord => boundsLines.extend(coord));
+      
+      if (!groupBounds[grp]) groupBounds[grp] = L.latLngBounds();
+      coords.forEach(coord => groupBounds[grp].extend(coord));
+    }
+  });
+}
+
+function processPointOptimized(pm, point, keyIndex) {
+  const rawName = pm.querySelector("name")?.textContent?.trim() || `Posto`;
+  const coords = parseCoordBlock(point.textContent);
+  
+  if (coords.length) {
+    const [lat, lng] = coords[0];
+    const autoCode = getOrCreateKeyCodeAuto(
+      pm, lat, lng, fileInput?.files?.[0]?.name || currentFile?.textContent || ""
+    );
+
+    localIndex.points.push({ name: rawName, code: autoCode, lat, lon: lng });
+    keyIndex.push({ lat, lng, code: autoCode });
+
+    const gName = postoGroupByName(rawName, pm);
+    const color = POST_COLORS[gName] || POST_COLORS.OUTROS;
+    
+    if (!postGroups[gName]) { 
+      postGroups[gName] = L.layerGroup(); 
+      postOrder.push(gName); 
+    }
+
+    const pot = getPotencia(pm);
+    const alim = getAlim(pm);
+    const label = `<b>${rawName}</b>`;
+    const alimDisplay = guessGroupForPoint(pm, lat, lng, alim);
+    const extra = `<br><small>Alim:</small> <b>${alimDisplay || "—"}</b>`
+                + (pot ? `<br><small>Potência:</small> <b>${pot}</b>` : ``)
+                + `<br><small>Cód.:</small> <b>${autoCode}</b>`;
+
+    const marker = makePostMarker(lat, lng, color, label, extra);
+    marker.setGroupName(alimDisplay);
+
+    allPostMarkers.push({ m: marker, lat, lng, text: rawName });
+
+    lod.keysContainer.addLayer(marker);
+    postGroups[gName].addLayer(marker);
+  }
+}
+
+function processPolygonOptimized(pm, polygonNodes, groupBounds, boundsLines) {
+  const rawName = pm.querySelector("name")?.textContent?.trim() || `Polígono`;
+  
+  polygonNodes.forEach(pg => {
+    const coordsRaw = parseCoordBlock(pg.textContent);
+    const coords = simplifyPathMeters(coordsRaw);
+    
+    if (coords.length > 2) {
+      const ctr = centroidLatLng(coords);
+      const grp = decideGroupForGeometry(pm, ctr, []);
+      
+      if (!lineGroups[grp]) {
+        lineGroups[grp] = L.layerGroup();
+        layerOrder.push(grp);
+      }
+      
+      const polygon = L.polygon(coords, {
+        color: LINE_COLORS[grp] || '#888',
+        weight: 2,
+        fillOpacity: 0.1
+      });
+      
+      const tooltip = `<b>${rawName}</b>`;
+      polygon.bindTooltip(tooltip, { sticky: true, direction: 'auto' });
+      
+      lineGroups[grp].addLayer(polygon);
+      
+      coords.forEach(coord => boundsLines.extend(coord));
+      
+      if (!groupBounds[grp]) groupBounds[grp] = L.latLngBounds();
+      coords.forEach(coord => groupBounds[grp].extend(coord));
+    }
+  });
+}
+
+/* ----------------- KMZ loader (original, kept for compatibility) ----------------- */
 async function loadKMZ(file) {
   const cityHint = prettyCityFromFilename(file?.name || "");
   showLoading(true, `Carregando mapa elétrico de ${cityHint || "sua cidade"}…`);
@@ -1419,6 +1821,38 @@ async function loadKMZ(file) {
     setStatus("❌ Erro ao processar KMZ: " + e.message);
   } finally {
     showLoading(false);
+  }
+}
+
+/* ----------------- Optimized KMZ loader with progressive rendering ----------------- */
+async function loadKMZOptimized(file, cityHint = "") {
+  const name = cityHint || prettyCityFromFilename(file?.name || "");
+  showLoading(true, `Extraindo ${name}…`);
+  
+  try {
+    // Load and extract KMZ with progress tracking
+    setStatus && setStatus(`Extraindo arquivo ${name}…`);
+    const zip = await JSZip.loadAsync(file);
+    
+    const kmlFiles = Object.keys(zip.files).filter(n => 
+      n.toLowerCase().endsWith(".kml") && !n.startsWith("__MACOSX")
+    );
+    
+    if (!kmlFiles.length) throw new Error("KML não encontrado no KMZ");
+    
+    // Use the first KML file found
+    const kmlEntry = kmlFiles[0];
+    setStatus && setStatus(`Lendo ${kmlEntry}…`);
+    
+    const text = await zip.files[kmlEntry].async("text");
+    
+    // Use optimized parser
+    await parseKMLOptimized(text, name);
+    
+  } catch (e) {
+    console.error('KMZ load error:', e);
+    setStatus(`❌ Erro ao processar KMZ: ${e.message}`);
+    throw e;
   }
 }
 
@@ -1556,23 +1990,122 @@ let _cities = [];
 let _pendingDeleteId = null;
 
 /* ---- Cache Storage para cidades (prefetch) ---- */
-const CACHE_CITIES = 'gv-cities-v1';
+const CACHE_CITIES = 'gv-cities-v2'; // Bumped version for new features
+const CACHE_METADATA = 'gv-cache-meta-v1';
 
+// Enhanced cache with versioning and metadata
 async function cacheOpen() {
   return ('caches' in window) ? caches.open(CACHE_CITIES) : null;
 }
+
+async function getCacheMetadata(url) {
+  try {
+    const stored = localStorage.getItem(`${CACHE_METADATA}:${url}`);
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function setCacheMetadata(url, metadata) {
+  try {
+    localStorage.setItem(`${CACHE_METADATA}:${url}`, JSON.stringify(metadata));
+  } catch {}
+}
+
 async function cacheGet(url) {
   try {
-    const c = await cacheOpen(); if (!c) return null;
-    const m = await c.match(url);
-    return m || null;
-  } catch { return null; }
+    const c = await cacheOpen(); 
+    if (!c) return null;
+    
+    const cached = await c.match(url);
+    if (!cached) return null;
+    
+    // Check if cache is still valid
+    const metadata = await getCacheMetadata(url);
+    if (metadata && metadata.expires && Date.now() > metadata.expires) {
+      // Cache expired, remove it
+      await c.delete(url);
+      localStorage.removeItem(`${CACHE_METADATA}:${url}`);
+      return null;
+    }
+    
+    return cached;
+  } catch { 
+    return null; 
+  }
 }
-async function cachePut(url, resp) {
+
+async function cachePut(url, resp, maxAge = 24 * 60 * 60 * 1000) { // 24h default
   try {
-    const c = await cacheOpen(); if (!c) return;
+    const c = await cacheOpen(); 
+    if (!c) return;
+    
+    // Store the response
     await c.put(url, resp.clone());
+    
+    // Store metadata with expiration
+    await setCacheMetadata(url, {
+      cached: Date.now(),
+      expires: Date.now() + maxAge,
+      size: parseInt(resp.headers.get('content-length') || '0'),
+      lastModified: resp.headers.get('last-modified')
+    });
   } catch {}
+}
+
+// Cache management utilities
+async function getCacheSize() {
+  try {
+    const c = await cacheOpen();
+    if (!c) return 0;
+    
+    const keys = await c.keys();
+    let totalSize = 0;
+    
+    for (const request of keys) {
+      const metadata = await getCacheMetadata(request.url);
+      if (metadata && metadata.size) {
+        totalSize += metadata.size;
+      }
+    }
+    
+    return totalSize;
+  } catch {
+    return 0;
+  }
+}
+
+async function clearExpiredCache() {
+  try {
+    const c = await cacheOpen();
+    if (!c) return;
+    
+    const keys = await c.keys();
+    const now = Date.now();
+    
+    for (const request of keys) {
+      const metadata = await getCacheMetadata(request.url);
+      if (metadata && metadata.expires && now > metadata.expires) {
+        await c.delete(request);
+        localStorage.removeItem(`${CACHE_METADATA}:${request.url}`);
+      }
+    }
+  } catch {}
+}
+
+// Check for file updates
+async function checkFileUpdate(url, cachedLastModified) {
+  try {
+    const resp = await fetch(url, { method: 'HEAD', cache: 'no-cache' });
+    const serverLastModified = resp.headers.get('last-modified');
+    
+    if (!serverLastModified || !cachedLastModified) return true; // Assume updated if no headers
+    
+    return new Date(serverLastModified) > new Date(cachedLastModified);
+  } catch {
+    return false; // Network error, use cache
+  }
 }
 
 // ------- API helpers -------
@@ -1789,75 +2322,192 @@ function setUpdateBanner(cityName, when){
   filesUpdEl.textContent = `Últimas atualizações: ${cityName} — ${nice}`;
 }
 
-/* ---------- Load city com cache-first + fallback de rede ---------- */
+/* ---------- Load city com cache inteligente + verificação de updates ---------- */
 async function loadCityOnMap(id) {
   try {
     const c = await apiGetCity(id);
-    if (!c || !c.file || !c.file.url) { alert('Esta cidade não possui arquivo cadastrado.'); return; }
-
-    const url   = c.file.url;
-    const name  = c.name || 'Modelo';
-    const isKmz = /\.kmz$/i.test(url);
-
-    setStatus && setStatus(`Baixando ${name}…`);
-    showLoading(true, `Carregando ${name}…`);
-
-    // 1) cache
-    let resp = await cacheGet(url);
-
-    // 2) rede como fallback; salva no cache se ok
-    if (!resp) {
-      const net = await fetch(url, { cache: 'no-cache' });
-      if (!net.ok) throw new Error('Falha ao baixar arquivo');
-      await cachePut(url, net.clone());
-      resp = net;
-      setStatus && setStatus(`📦 ${name}: salvo em cache para reaberturas rápidas`);
+    if (!c || !c.file || !c.file.url) { 
+      showToast('Esta cidade não possui arquivo cadastrado.', 'warning'); 
+      return; 
     }
 
+    const url = c.file.url;
+    const name = c.name || 'Modelo';
+    const isKmz = /\.kmz$/i.test(url);
+
+    setStatus && setStatus(`Verificando ${name}…`);
+    showLoading(true, `Carregando ${name}…`);
+
+    // Clean up expired cache first
+    await clearExpiredCache();
+
+    // 1) Try cache first
+    let resp = await cacheGet(url);
+    let fromCache = !!resp;
+    let needsUpdate = false;
+
+    if (resp) {
+      // Check if cached file needs update
+      const metadata = await getCacheMetadata(url);
+      if (metadata && metadata.lastModified) {
+        setStatus && setStatus(`Verificando atualizações…`);
+        needsUpdate = await checkFileUpdate(url, metadata.lastModified);
+        
+        if (needsUpdate) {
+          setStatus && setStatus(`Nova versão encontrada, baixando…`);
+          resp = null; // Force download
+        } else {
+          setStatus && setStatus(`📦 ${name} (do cache)`);
+        }
+      }
+    }
+
+    // 2) Download from network if not cached or needs update
+    if (!resp) {
+      try {
+        setStatus && setStatus(`Baixando ${name}…`);
+        const net = await timeoutFetch(url, { cache: 'no-cache' }, 30000); // 30s timeout
+        
+        if (!net.ok) throw new Error(`Erro HTTP ${net.status}: ${net.statusText}`);
+        
+        // Check file size before caching
+        const contentLength = net.headers.get('content-length');
+        const fileSize = contentLength ? parseInt(contentLength) : 0;
+        
+        if (fileSize > 50 * 1024 * 1024) { // 50MB limit
+          console.warn(`File too large (${Math.round(fileSize/1024/1024)}MB), not caching`);
+          resp = net;
+        } else {
+          // Cache with longer expiry for large files
+          const maxAge = fileSize > 10 * 1024 * 1024 ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+          await cachePut(url, net.clone(), maxAge);
+          resp = net;
+          
+          if (needsUpdate) {
+            setStatus && setStatus(`✅ ${name} atualizada e salva em cache`);
+          } else {
+            setStatus && setStatus(`📦 ${name} salva em cache`);
+          }
+        }
+        
+        fromCache = false;
+      } catch (fetchError) {
+        if (fromCache) {
+          // Network failed but we have cache, use it
+          resp = await cacheGet(url);
+          setStatus && setStatus(`⚠️ Usando versão em cache (sem conexão)`);
+        } else {
+          throw fetchError;
+        }
+      }
+    }
+
+    if (!resp) throw new Error('Falha ao obter arquivo');
+
+    // Extract timing info
     const lastHdr = resp.headers?.get?.('Last-Modified')
                  || resp.headers?.get?.('X-Last-Modified')
                  || resp.headers?.get?.('Date');
     const when = lastHdr ? new Date(lastHdr) : new Date();
     setUpdateBanner(name, when);
 
-    // PUBLICAÇÃO nova
+    // Process the file
+    setStatus && setStatus(`Processando ${name}…`);
+    
     if (isKmz) {
       const blob = await resp.blob();
       const fname = c.file.name || `${(c.prefix || cityToPrefix(name) || 'CITY')}.kmz`;
       const file = new File([blob], fname, { type: blob.type || 'application/vnd.google-earth.kmz' });
-      await loadKMZ(file);
+      await loadKMZOptimized(file, name);
     } else {
       const text = await resp.text();
-      await parseKML(text, name);
+      await parseKMLOptimized(text, name);
     }
 
     currentFile && (currentFile.textContent = (c.file.name || 'arquivo') + ` (de ${name})`);
-    setStatus && setStatus(`📥 ${name} carregada`);
+    setStatus && setStatus(`✅ ${name} carregada${fromCache ? ' (cache)' : ''}`);
     dlgCities?.close();
+    
   } catch (err) {
-    console.error(err);
-    alert(err.message || 'Erro ao carregar no mapa');
-    setStatus && setStatus('Erro ao carregar arquivo');
+    console.error('Load error:', err);
+    const errorMsg = err.name === 'AbortError' ? 'Timeout ao baixar arquivo' : 
+                     err.message || 'Erro ao carregar no mapa';
+    showToast(errorMsg, 'error');
+    setStatus && setStatus(`❌ Erro: ${errorMsg}`);
   } finally {
     showLoading(false);
   }
 }
 
-// Boot leve
-(async function initCitiesUI(){
-  if (!dlgCities) return;
-  try{ _cities = await apiListCities(); } catch {}
-})();
-(async function autoLoadDefaultCity(){
-  try{
+// Initialize cache management and auto-load
+(async function initCacheAndCities(){
+  // Clean expired cache on startup
+  await clearExpiredCache();
+  
+  // Initialize cities UI
+  if (dlgCities) {
+    try { _cities = await apiListCities(); } catch {}
+  }
+  
+  // Auto-load default city
+  try {
     const list = await apiListCities();
     const def = list.find(x => x.isDefault && x.file && x.file.url);
-    if (def){
+    if (def) {
       await loadCityOnMap(def.id);
       setStatus && setStatus(`⭐ Carregada cidade padrão: ${def.name}`);
     }
-  }catch(e){}
+  } catch(e) {}
 })();
+
+// Cache management utilities for admin/debugging
+window.cacheUtils = {
+  async getSize() { return await getCacheSize(); },
+  async clearExpired() { return await clearExpiredCache(); },
+  async clearAll() {
+    try {
+      const c = await cacheOpen();
+      if (c) {
+        const keys = await c.keys();
+        for (const request of keys) {
+          await c.delete(request);
+          localStorage.removeItem(`${CACHE_METADATA}:${request.url}`);
+        }
+        return keys.length;
+      }
+      return 0;
+    } catch {
+      return 0;
+    }
+  },
+  async getCacheInfo() {
+    try {
+      const c = await cacheOpen();
+      if (!c) return { cached: 0, totalSize: 0, entries: [] };
+      
+      const keys = await c.keys();
+      const entries = [];
+      let totalSize = 0;
+      
+      for (const request of keys) {
+        const metadata = await getCacheMetadata(request.url);
+        const entry = {
+          url: request.url,
+          cached: metadata?.cached ? new Date(metadata.cached) : null,
+          expires: metadata?.expires ? new Date(metadata.expires) : null,
+          size: metadata?.size || 0,
+          lastModified: metadata?.lastModified
+        };
+        entries.push(entry);
+        totalSize += entry.size;
+      }
+      
+      return { cached: keys.length, totalSize, entries };
+    } catch {
+      return { cached: 0, totalSize: 0, entries: [] };
+    }
+  }
+};
 
 /* =========================================================
    ADMIN – Logo uploader (server-side) + PWA icons refresh

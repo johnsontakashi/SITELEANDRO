@@ -1,6 +1,27 @@
 <?php
 // api/upload_logo.php
+session_start();
 header('Content-Type: application/json; charset=utf-8');
+
+// Authentication check
+function validate_session(): bool {
+  $SESSION_TIMEOUT = 3600; // 1 hour
+  if (!isset($_SESSION['user_id']) || !isset($_SESSION['last_activity'])) {
+    return false;
+  }
+  if (time() - $_SESSION['last_activity'] > $SESSION_TIMEOUT) {
+    session_destroy();
+    return false;
+  }
+  $_SESSION['last_activity'] = time();
+  return true;
+}
+
+if (!validate_session()) {
+  http_response_code(401);
+  echo json_encode(['ok' => false, 'error' => 'Autenticação necessária'], JSON_UNESCAPED_UNICODE);
+  exit;
+}
 
 // ---- CONFIG ----
 $iconsDir   = __DIR__ . '/../assets/icons/';

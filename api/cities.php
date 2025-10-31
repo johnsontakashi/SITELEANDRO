@@ -1,6 +1,7 @@
 <?php
 // api/cities.php
 declare(strict_types=1);
+session_start();
 header('Content-Type: application/json; charset=utf-8');
 
 // ======== Config ========
@@ -40,6 +41,41 @@ function clean_prefix(string $p): string {
   $p = strtoupper(preg_replace('/[^A-Za-z0-9]/','', $p));
   return substr($p, 0, 8);
 }
+function sanitize_filename(string $filename): string {
+  // Remove path separators and dangerous characters
+  $filename = basename($filename);
+  $filename = preg_replace('/[^A-Za-z0-9._-]/', '_', $filename);
+  $filename = preg_replace('/_{2,}/', '_', $filename); // Multiple underscores to single
+  return substr($filename, 0, 255); // Limit length
+}
+function validate_path(string $path, string $allowed_base): bool {
+  $real_path = realpath($path);
+  $real_base = realpath($allowed_base);
+  return $real_path !== false && 
+         $real_base !== false && 
+         strpos($real_path, $real_base) === 0;
+}
+function safe_delete_directory(string $dir, string $allowed_base): bool {
+  if (!validate_path($dir, $allowed_base)) {
+    return false;
+  }
+  
+  if (!is_dir($dir)) {
+    return false;
+  }
+  
+  $iterator = new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS);
+  $files = new RecursiveIteratorIterator($iterator, RecursiveIteratorIterator::CHILD_FIRST);
+  
+  foreach ($files as $f) {
+    if (!validate_path($f->getPathname(), $allowed_base)) {
+      continue; // Skip files outside allowed base
+    }
+    $f->isDir() ? @rmdir($f->getPathname()) : @unlink($f->getPathname());
+  }
+  
+  return @rmdir($dir);
+}
 function city_to_prefix(string $name): string {
   $clean = preg_replace('/[^A-Za-z ]/','', iconv('UTF-8','ASCII//TRANSLIT',$name));
   $clean = trim($clean ?: 'GEN');
@@ -52,6 +88,28 @@ function city_to_prefix(string $name): string {
 }
 function is_kml(string $n): bool { return preg_match('/\.kml$/i', $n) === 1; }
 function is_kmz(string $n): bool { return preg_match('/\.kmz$/i', $n) === 1; }
+
+// Authentication helper
+function validate_session(): bool {
+  $SESSION_TIMEOUT = 3600; // 1 hour
+  if (!isset($_SESSION['user_id']) || !isset($_SESSION['last_activity'])) {
+    return false;
+  }
+  if (time() - $_SESSION['last_activity'] > $SESSION_TIMEOUT) {
+    session_destroy();
+    return false;
+  }
+  $_SESSION['last_activity'] = time();
+  return true;
+}
+
+function require_auth(): void {
+  if (!validate_session()) {
+    http_response_code(401);
+    echo json_encode(['ok' => false, 'error' => 'Autenticação necessária'], JSON_UNESCAPED_UNICODE);
+    exit;
+  }
+}
 
 // ======== Router ========
 $method = $_SERVER['REQUEST_METHOD'];
@@ -84,6 +142,12 @@ if ($method === 'GET' && ($action === '' || $action === 'list')) {
 // ---------- GET ----------
 if ($method === 'GET' && $action === 'get') {
   $id = $_GET['id'] ?? '';
+  
+  // Validate ID format
+  if (!preg_match('/^c_[a-f0-9]{12}$/', $id)) {
+    json_err('ID inválido');
+  }
+  
   foreach ($index as $c) {
     if ($c['id'] === $id) {
       if (!empty($c['file']) && !empty($c['file']['path'])) {
@@ -99,11 +163,29 @@ if ($method === 'GET' && $action === 'get') {
 
 // ---------- CREATE/UPDATE ----------
 if ($method === 'POST' && ($action === 'create' || $action === 'update')) {
+  require_auth();
   $name = trim($_POST['name'] ?? '');
   $prefix = trim($_POST['prefix'] ?? '');
   $id = $action === 'update' ? trim($_POST['id'] ?? '') : '';
 
+  // Enhanced validation
   if ($name === '') json_err('Nome da cidade é obrigatório');
+  if (strlen($name) > 100) json_err('Nome muito longo (máx. 100 caracteres)');
+  if (!preg_match('/^[A-Za-z0-9\s\-_áéíóúàèìòùâêîôûãõçÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÇ]+$/', $name)) {
+    json_err('Nome contém caracteres inválidos');
+  }
+  
+  if ($prefix && strlen($prefix) > 8) json_err('Prefixo muito longo (máx. 8 caracteres)');
+  if ($prefix && !preg_match('/^[A-Za-z0-9]+$/', $prefix)) {
+    json_err('Prefixo contém caracteres inválidos');
+  }
+  
+  // Validate ID for updates
+  if ($action === 'update') {
+    if (!preg_match('/^c_[a-f0-9]{12}$/', $id)) {
+      json_err('ID inválido');
+    }
+  }
 
   if ($action === 'create') {
     $id = uid();
@@ -139,18 +221,59 @@ if ($method === 'POST' && ($action === 'create' || $action === 'update')) {
   if (!empty($_FILES['file']) && is_uploaded_file($_FILES['file']['tmp_name'])) {
     $file = $_FILES['file'];
     $origName = $file['name'];
+    $fileSize = $file['size'];
+    
+    // Enhanced validation
     if (!is_kml($origName) && !is_kmz($origName)) {
       json_err('Formato inválido. Envie .kml ou .kmz');
     }
+    if ($fileSize > 50*1024*1024) json_err('Arquivo muito grande (máx. 50MB)');
+    if ($fileSize < 10) json_err('Arquivo muito pequeno (mín. 10 bytes)');
+    
+    // Validate MIME type
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mimeType = finfo_file($finfo, $file['tmp_name']);
+    finfo_close($finfo);
+    
+    $allowedMimes = ['application/vnd.google-earth.kml+xml', 'application/vnd.google-earth.kmz', 
+                     'application/xml', 'text/xml', 'application/zip'];
+    if (!in_array($mimeType, $allowedMimes)) {
+      json_err('Tipo de arquivo não permitido: ' . $mimeType);
+    }
+    
+    // Validate ID format
+    if (!preg_match('/^c_[a-f0-9]{12}$/', $id)) {
+      json_err('ID inválido');
+    }
+    
     $cityDir = $UPLOAD_DIR . '/' . $id;
+    
+    // Validate directory path
+    if (!validate_path($cityDir, $UPLOAD_DIR)) {
+      json_err('Caminho de diretório inválido');
+    }
+    
     if (!is_dir($cityDir)) @mkdir($cityDir, 0775, true);
-    $safeName = preg_replace('/[^A-Za-z0-9_\-\.]/','_', $origName);
+    
+    $safeName = sanitize_filename($origName);
+    if (empty($safeName) || strlen($safeName) < 5) {
+      json_err('Nome de arquivo inválido');
+    }
+    
     $target = $cityDir . '/' . $safeName;
+    
+    // Final path validation
+    if (!validate_path($target, $UPLOAD_DIR)) {
+      json_err('Caminho de arquivo inválido');
+    }
 
     // remove arquivo antigo (se houver)
     foreach ($index as &$c) {
       if ($c['id'] === $id && !empty($c['file']['path'])) {
-        @unlink($c['file']['path']);
+        $oldPath = $c['file']['path'];
+        if (validate_path($oldPath, $UPLOAD_DIR) && file_exists($oldPath)) {
+          @unlink($oldPath);
+        }
       }
     }
     unset($c);
@@ -193,6 +316,7 @@ if ($method === 'POST' && ($action === 'create' || $action === 'update')) {
 
 // ---------- SET DEFAULT (⭐) ----------
 if ($method === 'POST' && $action === 'set_default') {
+  require_auth();
   $id = trim($_POST['id'] ?? '');
   if ($id === '') json_err('ID obrigatório');
 
@@ -229,7 +353,14 @@ if ($method === 'POST' && $action === 'set_default') {
 
 // ---------- DELETE ----------
 if (($method === 'POST' || $method === 'DELETE') && $action === 'delete') {
+  require_auth();
   $id = $_POST['id'] ?? ($_GET['id'] ?? '');
+  
+  // Validate ID format
+  if (!preg_match('/^c_[a-f0-9]{12}$/', $id)) {
+    json_err('ID inválido');
+  }
+  
   $new = [];
   $removed = null;
   foreach ($index as $c) {
@@ -238,17 +369,10 @@ if (($method === 'POST' || $method === 'DELETE') && $action === 'delete') {
   }
   if (!$removed) json_err('Cidade não encontrada', 404);
 
-  // apaga diretório com arquivos
+  // apaga diretório com arquivos usando função segura
   $dir = $UPLOAD_DIR . '/' . $id;
-  if (is_dir($dir)) {
-    $it = new RecursiveIteratorIterator(
-      new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
-      RecursiveIteratorIterator::CHILD_FIRST
-    );
-    foreach ($it as $f) {
-      $f->isDir() ? @rmdir($f->getPathname()) : @unlink($f->getPathname());
-    }
-    @rmdir($dir);
+  if (is_dir($dir) && validate_path($dir, $UPLOAD_DIR)) {
+    safe_delete_directory($dir, $UPLOAD_DIR);
   }
 
   save_index($DB_JSON, $new);
