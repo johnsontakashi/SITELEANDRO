@@ -60,7 +60,7 @@ function validate_session(): bool {
     return true;
 }
 
-function get_current_user(): ?array {
+function get_authenticated_user(): ?array {
     if (!validate_session()) return null;
     $users = load_users();
     foreach ($users as $user) {
@@ -137,7 +137,7 @@ if ($method === 'POST' && $action === 'logout') {
 
 // ---------- CHECK SESSION ----------
 if ($method === 'GET' && $action === 'check') {
-    $user = get_current_user();
+    $user = get_authenticated_user();
     if ($user) {
         json_ok([
             'username' => $user['username'],
@@ -150,7 +150,7 @@ if ($method === 'GET' && $action === 'check') {
 
 // ---------- CHANGE PASSWORD ----------
 if ($method === 'POST' && $action === 'change-password') {
-    $user = get_current_user();
+    $user = get_authenticated_user();
     if (!$user) json_err('Não autenticado', 401);
     
     $current = trim($_POST['current_password'] ?? '');

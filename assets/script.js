@@ -362,6 +362,16 @@ $("#closeSidebar")?.addEventListener("click", () => {
   sidebar.classList.remove("open");
   document.body.classList.remove("sidebar-open");
 });
+
+/* ----------------- Location-based download button ----------------- */
+$("#btnDownloadMyLocation")?.addEventListener("click", async () => {
+  try {
+    await downloadCurrentCityKMZ();
+  } catch (error) {
+    console.error('Location download failed:', error);
+  }
+});
+
 document.addEventListener("click", (e) => {
   if (!sidebar) return;
   if (sidebar.classList.contains("open") &&
@@ -863,8 +873,13 @@ const palette = [
   "#748ffc","#e599f7","#12b886","#e67700","#5c7cfa",
 ];
 const POST_COLORS = { "FU": "#e03131", "FA": "#4f3b09", "RE": "#2f9e44", "KVA":"#845ef7", "OUTROS": "#868e96" };
+const LINE_COLORS = new Proxy({}, {
+  get: (target, prop) => colors[prop] || nextColor(prop)
+});
 
 const groups = {}, colors = {}, order = [];
+const lineGroups = groups; // Alias for backward compatibility  
+const layerOrder = order; // Alias for backward compatibility
 const postGroups = {}, postOrder = [];
 let pIdx = 0;
 let published = null, stats = { markers: 0, lines: 0, polygons: 0 };
@@ -906,10 +921,14 @@ function resetGroups() {
   clearEmphasis();
 }
 
-function refreshCounters() {
+function updateStats() {
   $("#markerCount") && ($("#markerCount").textContent = stats.markers);
   $("#lineCount") && ($("#lineCount").textContent = stats.lines);
   $("#polygonCount") && ($("#polygonCount").textContent = stats.polygons);
+}
+
+function refreshCounters() {
+  updateStats();
 }
 function renderLayersPanelLines() {
   if (!layersListLines) return;
@@ -924,20 +943,34 @@ function renderLayersPanelLines() {
     row.className = "layer-item";
     safeSetInnerHTML(row, `<input type="checkbox" checked data-af="${escapeHtml(name)}"><span class="layer-color" style="background:${escapeHtml(color)}"></span><span class="layer-name">${escapeHtml(name)}</span>`);
     const cb = row.querySelector("input");
-    cb.onchange = () => {
-      if (cb.checked) {
-        groups[name].addTo(map);
-      } else {
-        if (highlight.line && groups[name]?.hasLayer?.(highlight.line)) clearEmphasis();
-        groups[name].eachLayer(l => l.unbindTooltip?.());
-        map.removeLayer(groups[name]);
-      }
-    };
+    if (cb) {
+      cb.onchange = () => {
+        try {
+          if (cb.checked) {
+            if (groups[name]) {
+              groups[name].addTo(map);
+            }
+          } else {
+            if (groups[name]) {
+              if (highlight.line && groups[name]?.hasLayer?.(highlight.line)) clearEmphasis();
+              groups[name].eachLayer(l => l.unbindTooltip?.());
+              if (map.hasLayer(groups[name])) {
+                map.removeLayer(groups[name]);
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`Error toggling line layer ${name}:`, error);
+        }
+      };
+    }
     layersListLines.appendChild(row);
   });
 }
 function renderLayersPanelPosts() {
   if (!layersListPosts) return;
+  console.log('Rendering posts panel with postOrder:', postOrder);
+  console.log('postGroups:', postGroups);
   layersListPosts.innerHTML = "";
   if (!postOrder.length) {
     safeSetInnerHTML(layersListPosts, `<div class="empty"><div class="empty-ico">📍</div><p>Nenhum posto</p></div>`);
@@ -949,7 +982,32 @@ function renderLayersPanelPosts() {
     row.className = "layer-item";
     safeSetInnerHTML(row, `<input type="checkbox" checked data-pg="${escapeHtml(gname)}"><span class="layer-color" style="background:${escapeHtml(color)}"></span><span class="layer-name">${escapeHtml(gname)}</span>`);
     const cb = row.querySelector("input");
-    cb.onchange = () => cb.checked ? postGroups[gname].addTo(map) : map.removeLayer(postGroups[gname]);
+    if (cb) {
+      cb.onchange = () => {
+        console.log(`Checkbox for ${gname} clicked, checked: ${cb.checked}`);
+        try {
+          if (cb.checked) {
+            console.log(`Adding ${gname} to map`, postGroups[gname]);
+            if (postGroups[gname]) {
+              postGroups[gname].addTo(map);
+              console.log(`${gname} added to map successfully`);
+            } else {
+              console.error(`postGroups[${gname}] does not exist`);
+            }
+          } else {
+            console.log(`Removing ${gname} from map`, postGroups[gname]);
+            if (postGroups[gname] && map.hasLayer(postGroups[gname])) {
+              map.removeLayer(postGroups[gname]);
+              console.log(`${gname} removed from map successfully`);
+            } else {
+              console.log(`${gname} was not on map or doesn't exist`);
+            }
+          }
+        } catch (error) {
+          console.error(`Error toggling layer ${gname}:`, error);
+        }
+      };
+    }
     layersListPosts.appendChild(row);
   });
 }
@@ -1226,13 +1284,8 @@ function updateLOD() {
 
   const canShowMarkers = (z >= Z_MARKERS_ON) && !lod.blockMarkersUntilZoom;
 
-  if (canShowMarkers && !lod.keysVisible && lod.keysContainer) {
-    map.addLayer(lod.keysContainer);
-    lod.keysVisible = true;
-  } else if ((!canShowMarkers || !lod.keysContainer) && lod.keysVisible) {
-    map.removeLayer(lod.keysContainer);
-    lod.keysVisible = false;
-  }
+  // Post markers are now managed through postGroups only
+  // keysContainer is disabled
 
   const IS_TOUCH = matchMedia?.('(pointer:coarse)').matches;
   const TOUCH_BONUS = IS_TOUCH ? 1.5 : 0;
@@ -1345,18 +1398,8 @@ async function parseKML(text, cityHint = "") {
     localIndex.groups = [];
     stats = { markers: 0, lines: 0, polygons: 0 };
 
-    // contêiner de postos (oculto; só aparece após 1º zoom do usuário)
-    if (hasCluster) {
-      lod.keysContainer = L.markerClusterGroup({
-        chunkedLoading: true,
-        disableClusteringAtZoom: Z_MARKERS_ON + 2,
-        spiderfyOnMaxZoom: false,
-        showCoverageOnHover: false
-      });
-    } else {
-      lod.keysRawGroup = L.layerGroup();
-      lod.keysContainer = lod.keysRawGroup;
-    }
+    // Posts will be managed through postGroups only
+    lod.keysContainer = null;
     lod.keysVisible = false;
     lod.blockMarkersUntilZoom = true;
 
@@ -1392,7 +1435,9 @@ async function parseKML(text, cityHint = "") {
             const color = POST_COLORS[gName] || POST_COLORS.OUTROS;
             if (!postGroups[gName]) { 
               postGroups[gName] = L.layerGroup(); 
-              postOrder.push(gName); 
+              postOrder.push(gName);
+              postGroups[gName].addTo(map); // Add to map by default
+              console.log(`Created postGroup for ${gName}`, postGroups[gName]);
             }
 
             const pot   = getPotencia(pm);
@@ -1407,7 +1452,6 @@ async function parseKML(text, cityHint = "") {
 
             allPostMarkers.push({ m: marker, lat, lng, text: rawName });
 
-            lod.keysContainer.addLayer(marker);
             postGroups[gName].addLayer(marker);
 
             stats.markers++;
@@ -1540,17 +1584,8 @@ async function parseKMLOptimized(text, cityHint = "") {
     stats = { markers: 0, lines: 0, polygons: 0 };
 
     // Setup progressive containers
-    if (hasCluster) {
-      lod.keysContainer = L.markerClusterGroup({
-        chunkedLoading: true,
-        disableClusteringAtZoom: Z_MARKERS_ON + 2,
-        spiderfyOnMaxZoom: false,
-        showCoverageOnHover: false
-      });
-    } else {
-      lod.keysRawGroup = L.layerGroup();
-      lod.keysContainer = lod.keysRawGroup;
-    }
+    // Posts will be managed through postGroups only
+    lod.keysContainer = null;
     lod.keysVisible = false;
     lod.blockMarkersUntilZoom = true;
 
@@ -1668,8 +1703,8 @@ async function parseKMLOptimized(text, cityHint = "") {
     }
 
     // Refresh controls
-    rebuildLayersControls();
-    rebuildPostsControls();
+    renderLayersPanelLines();
+    renderLayersPanelPosts();
     updateStats();
     
     // Handle post-publish location target
@@ -1750,7 +1785,9 @@ function processPointOptimized(pm, point, keyIndex) {
     
     if (!postGroups[gName]) { 
       postGroups[gName] = L.layerGroup(); 
-      postOrder.push(gName); 
+      postOrder.push(gName);
+      postGroups[gName].addTo(map); // Add to map by default
+      console.log(`Created postGroup for ${gName}`, postGroups[gName]);
     }
 
     const pot = getPotencia(pm);
@@ -1766,7 +1803,6 @@ function processPointOptimized(pm, point, keyIndex) {
 
     allPostMarkers.push({ m: marker, lat, lng, text: rawName });
 
-    lod.keysContainer.addLayer(marker);
     postGroups[gName].addLayer(marker);
   }
 }
@@ -1951,10 +1987,8 @@ showAllPostsBtn?.addEventListener("click", () => {
     const cb = layersListPosts?.querySelector(`input[data-pg="${gname}"]`);
     if (cb) cb.checked = true;
   });
-  if (!lod.keysVisible && lod.keysContainer && map.getZoom() >= Z_MARKERS_ON && !lod.blockMarkersUntilZoom) {
-    map.addLayer(lod.keysContainer);
-    lod.keysVisible = true;
-  }
+  // Post markers are now managed through postGroups only
+  // keysContainer is disabled
 });
 
 /* ----------------- Inicial ----------------- */
@@ -2620,11 +2654,17 @@ window.cacheUtils = {
     if ($btnInline) $btnInline.addEventListener('click',() => $fileInput && $fileInput.click());
 
     if ($fileInput) {
-      $fileInput.addEventListener('change', (ev) => {
-        const file = ev.target.files && ev.target.files[0];
-        if (file) uploadLogo(file);
-        ev.target.value = '';
-      });
+      try {
+        $fileInput.addEventListener('change', (ev) => {
+          const file = ev.target.files && ev.target.files[0];
+          if (file) uploadLogo(file);
+          ev.target.value = '';
+        });
+      } catch (e) {
+        console.error('Error setting up file input listener:', e);
+      }
+    } else {
+      console.warn('File input element not found:', cfg.sel.fileInput);
     }
     return { applyLogoUI, loadServerLogo, uploadLogo, config: cfg };
   }
@@ -3069,4 +3109,149 @@ async function loadNearestCityThenReturn(lat, lng) {
     setStatus && setStatus('⚠️ Erro ao carregar cidade próxima.');
     return null;
   }
+}
+
+// ========= LOCATION-BASED DOWNLOAD SYSTEM =========
+
+/**
+ * Gets user's current location using geolocation API
+ */
+async function getCurrentLocation() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Geolocalização não é suportada neste navegador'));
+      return;
+    }
+
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 300000 // 5 minutes cache
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy
+        });
+      },
+      (error) => {
+        let message = 'Erro ao obter localização';
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            message = 'Permissão de localização negada';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            message = 'Localização não disponível';
+            break;
+          case error.TIMEOUT:
+            message = 'Tempo limite para obter localização';
+            break;
+        }
+        reject(new Error(message));
+      },
+      options
+    );
+  });
+}
+
+/**
+ * Finds and downloads KMZ for user's current city
+ */
+async function downloadCurrentCityKMZ() {
+  try {
+    showLoading(true, 'Obtendo sua localização...');
+    setStatus && setStatus('📍 Detectando localização...');
+
+    // Get user's current location
+    const location = await getCurrentLocation();
+    showToast(`Localização detectada (±${Math.round(location.accuracy)}m)`, 'success');
+    
+    showLoading(true, 'Procurando cidade mais próxima...');
+    setStatus && setStatus('🔍 Buscando cidade próxima...');
+
+    // Find nearest city
+    const cities = await apiListCities();
+    if (!cities || cities.length === 0) {
+      throw new Error('Nenhuma cidade cadastrada no sistema');
+    }
+
+    let nearestCity = null;
+    let minDistance = Infinity;
+
+    cities.forEach(city => {
+      if (city.lat && city.lng) {
+        const distance = calculateDistance(
+          location.lat, location.lng, 
+          parseFloat(city.lat), parseFloat(city.lng)
+        );
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestCity = city;
+        }
+      }
+    });
+
+    if (!nearestCity) {
+      throw new Error('Nenhuma cidade com coordenadas encontrada');
+    }
+
+    const distanceKm = Math.round(minDistance * 100) / 100;
+    showToast(`Cidade mais próxima: ${nearestCity.name} (${distanceKm}km)`, 'info');
+    
+    showLoading(true, `Baixando dados de ${nearestCity.name}...`);
+    setStatus && setStatus(`📦 Baixando ${nearestCity.name}...`);
+
+    // Load the city data (this will cache it automatically)
+    await loadCityOnMap(nearestCity.id);
+    
+    // Center map on user's location
+    map.setView([location.lat, location.lng], 14);
+    
+    // Add a marker for user's location
+    const userMarker = L.marker([location.lat, location.lng], {
+      icon: L.divIcon({
+        className: 'user-location-marker',
+        html: '📍',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+      })
+    }).addTo(map);
+    
+    userMarker.bindTooltip('Sua localização', { permanent: false, direction: 'top' });
+
+    showLoading(false);
+    setStatus && setStatus(`✅ ${nearestCity.name} carregada e em cache!`);
+    showToast(`Dados de ${nearestCity.name} baixados e salvos localmente!`, 'success');
+
+    return {
+      city: nearestCity,
+      userLocation: location,
+      distance: distanceKm,
+      marker: userMarker
+    };
+
+  } catch (error) {
+    console.error('Error in downloadCurrentCityKMZ:', error);
+    showLoading(false);
+    setStatus && setStatus('❌ Erro ao baixar cidade');
+    showToast(error.message, 'error');
+    throw error;
+  }
+}
+
+/**
+ * Calculate distance between two coordinates in kilometers
+ */
+function calculateDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng/2) * Math.sin(dLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
 }
