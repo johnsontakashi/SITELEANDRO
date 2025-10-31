@@ -1,8 +1,20 @@
 <?php
 // api/cities.php
 declare(strict_types=1);
+
+// Performance optimizations for large uploads
+ini_set('memory_limit', '256M');
+ini_set('max_execution_time', '300'); // 5 minutes
+ini_set('upload_max_filesize', '50M');
+ini_set('post_max_size', '52M');
+
 session_start();
 header('Content-Type: application/json; charset=utf-8');
+
+// Enable compression for faster responses
+if (extension_loaded('zlib') && !ob_get_level()) {
+  ob_start('ob_gzhandler');
+}
 
 // ======== Config ========
 $ROOT = dirname(__DIR__);
@@ -230,13 +242,19 @@ if ($method === 'POST' && ($action === 'create' || $action === 'update')) {
     if ($fileSize > 50*1024*1024) json_err('Arquivo muito grande (máx. 50MB)');
     if ($fileSize < 10) json_err('Arquivo muito pequeno (mín. 10 bytes)');
     
-    // Validate MIME type
+    // Quick MIME type validation (more efficient than full file scan)
+    $extension = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+    if (!in_array($extension, ['kml', 'kmz'])) {
+      json_err('Extensão de arquivo não permitida');
+    }
+    
+    // Lightweight MIME validation for security
     $finfo = finfo_open(FILEINFO_MIME_TYPE);
     $mimeType = finfo_file($finfo, $file['tmp_name']);
     finfo_close($finfo);
     
     $allowedMimes = ['application/vnd.google-earth.kml+xml', 'application/vnd.google-earth.kmz', 
-                     'application/xml', 'text/xml', 'application/zip'];
+                     'application/xml', 'text/xml', 'application/zip', 'application/octet-stream'];
     if (!in_array($mimeType, $allowedMimes)) {
       json_err('Tipo de arquivo não permitido: ' . $mimeType);
     }
@@ -267,20 +285,21 @@ if ($method === 'POST' && ($action === 'create' || $action === 'update')) {
       json_err('Caminho de arquivo inválido');
     }
 
-    // remove arquivo antigo (se houver)
+    // Move file first, then cleanup old file (reduce failure points)
+    if (!move_uploaded_file($file['tmp_name'], $target)) {
+      json_err('Falha ao salvar arquivo no servidor', 500);
+    }
+
+    // Remove old file after successful upload (to avoid data loss)
     foreach ($index as &$c) {
       if ($c['id'] === $id && !empty($c['file']['path'])) {
         $oldPath = $c['file']['path'];
-        if (validate_path($oldPath, $UPLOAD_DIR) && file_exists($oldPath)) {
+        if ($oldPath !== $target && validate_path($oldPath, $UPLOAD_DIR) && file_exists($oldPath)) {
           @unlink($oldPath);
         }
       }
     }
     unset($c);
-
-    if (!move_uploaded_file($file['tmp_name'], $target)) {
-      json_err('Falha ao salvar arquivo no servidor', 500);
-    }
 
     // grava metadados
     foreach ($index as &$c) {

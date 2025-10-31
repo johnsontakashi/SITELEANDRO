@@ -968,48 +968,158 @@ function renderLayersPanelLines() {
   });
 }
 function renderLayersPanelPosts() {
-  if (!layersListPosts) return;
-  console.log('Rendering posts panel with postOrder:', postOrder);
-  console.log('postGroups:', postGroups);
-  layersListPosts.innerHTML = "";
-  if (!postOrder.length) {
-    safeSetInnerHTML(layersListPosts, `<div class="empty"><div class="empty-ico">📍</div><p>Nenhum posto</p></div>`);
+  console.log('🔥 renderLayersPanelPosts() CALLED');
+  
+  if (!layersListPosts) {
+    console.error('❌ layersListPosts element not found!');
     return;
   }
-  postOrder.forEach((gname) => {
-    const color = POST_COLORS[gname] || POST_COLORS.OUTROS;
-    const row = document.createElement("label");
-    row.className = "layer-item";
-    safeSetInnerHTML(row, `<input type="checkbox" checked data-pg="${escapeHtml(gname)}"><span class="layer-color" style="background:${escapeHtml(color)}"></span><span class="layer-name">${escapeHtml(gname)}</span>`);
-    const cb = row.querySelector("input");
-    if (cb) {
-      cb.onchange = () => {
-        console.log(`Checkbox for ${gname} clicked, checked: ${cb.checked}`);
-        try {
-          if (cb.checked) {
-            console.log(`Adding ${gname} to map`, postGroups[gname]);
-            if (postGroups[gname]) {
-              postGroups[gname].addTo(map);
-              console.log(`${gname} added to map successfully`);
-            } else {
-              console.error(`postGroups[${gname}] does not exist`);
-            }
-          } else {
-            console.log(`Removing ${gname} from map`, postGroups[gname]);
-            if (postGroups[gname] && map.hasLayer(postGroups[gname])) {
-              map.removeLayer(postGroups[gname]);
-              console.log(`${gname} removed from map successfully`);
-            } else {
-              console.log(`${gname} was not on map or doesn't exist`);
-            }
-          }
-        } catch (error) {
-          console.error(`Error toggling layer ${gname}:`, error);
-        }
-      };
+  
+  console.log('🔄 Rendering posts panel with postOrder:', postOrder);
+  console.log('🔄 postGroups:', postGroups);
+  console.log('🔄 layersListPosts element:', layersListPosts);
+  
+  layersListPosts.innerHTML = "";
+  console.log('🧹 Cleared layersListPosts content');
+  
+  if (!postOrder.length) {
+    console.log('📍 No posts to display - showing empty message');
+    const emptyDiv = document.createElement('div');
+    emptyDiv.className = 'empty';
+    emptyDiv.innerHTML = '<div class="empty-ico">📍</div><p>Nenhum posto carregado</p>';
+    layersListPosts.appendChild(emptyDiv);
+    return;
+  }
+  
+  console.log('📍 Creating checkboxes for post groups:', postOrder);
+  
+  // Ensure standard order: FA, FU, RE, OUTROS
+  const standardOrder = ['FA', 'FU', 'RE', 'OUTROS'];
+  const orderedGroups = standardOrder.filter(gname => postOrder.includes(gname));
+  
+  // Add any additional groups that aren't in the standard list
+  postOrder.forEach(gname => {
+    if (!standardOrder.includes(gname)) {
+      orderedGroups.push(gname);
     }
-    layersListPosts.appendChild(row);
   });
+  
+  orderedGroups.forEach((gname) => {
+    const color = POST_COLORS[gname] || POST_COLORS.OUTROS;
+    const row = document.createElement("div");
+    row.className = "layer-item";
+    
+    // Add specific classes for each group type
+    row.classList.add(`group-${gname.toLowerCase()}`);
+    
+    // Special styling for FU group
+    if (gname === 'FU') {
+      row.classList.add('fu-group');
+    }
+    
+    // Create elements manually to avoid safeSetInnerHTML issues
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = true;
+    checkbox.setAttribute('data-pg', gname);
+    checkbox.id = `checkbox-${gname}`;
+    
+    const colorSpan = document.createElement('span');
+    colorSpan.className = 'layer-color';
+    colorSpan.style.background = color;
+    
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'layer-name';
+    nameSpan.textContent = gname;
+    
+    row.appendChild(checkbox);
+    row.appendChild(colorSpan);
+    row.appendChild(nameSpan);
+    
+    console.log(`📍 Created checkbox with ID: ${checkbox.id}`);
+    
+    // Use the checkbox variable directly instead of querying
+    const cb = checkbox;
+    
+    // Use addEventListener instead of onchange for better event handling
+    cb.addEventListener('change', (e) => {
+      e.stopPropagation(); // Prevent event bubbling
+      console.log(`Checkbox for ${gname} clicked, checked: ${cb.checked}`);
+      
+      // Special logging for each group
+      const emoji = gname === 'FU' ? '🔴' : gname === 'FA' ? '🟤' : gname === 'RE' ? '🟢' : '⚫';
+      console.log(`${emoji} ${gname} Group toggled: ${cb.checked ? 'SHOWN' : 'HIDDEN'}`);
+      
+      try {
+        if (cb.checked) {
+          if (postGroups[gname]) {
+            postGroups[gname].addTo(map);
+            console.log(`${gname} added to map successfully`);
+            setStatus && setStatus(`${emoji} ${gname} posts are now visible`);
+          } else {
+            console.error(`postGroups[${gname}] does not exist`);
+          }
+        } else {
+          if (postGroups[gname] && map.hasLayer(postGroups[gname])) {
+            map.removeLayer(postGroups[gname]);
+            console.log(`${gname} removed from map successfully`);
+            setStatus && setStatus(`${emoji} ${gname} posts are now hidden`);
+          } else {
+            console.log(`${gname} was not on map or doesn't exist`);
+          }
+        }
+      } catch (error) {
+        console.error(`Error toggling layer ${gname}:`, error);
+      }
+    });
+    
+    // Also add click handler to prevent event conflicts
+    cb.addEventListener('click', (e) => {
+      e.stopPropagation();
+      console.log(`Direct click on ${gname} checkbox`);
+    });
+    
+    // Add click handler to the row for better UX (clicking anywhere toggles)
+    row.addEventListener('click', (e) => {
+      if (e.target.type !== 'checkbox') {
+        e.preventDefault();
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event('change'));
+      }
+    });
+    
+    layersListPosts.appendChild(row);
+    console.log(`✅ Created checkbox for ${gname} group`);
+    
+    // Immediate verification
+    const verification = document.getElementById(`checkbox-${gname}`);
+    console.log(`🔍 Immediate verification for checkbox-${gname}:`, verification ? 'FOUND' : 'NOT FOUND');
+  });
+  
+  console.log(`📍 Total checkboxes created: ${orderedGroups.length}`);
+  
+  // Test checkbox functionality immediately after creation
+  setTimeout(() => {
+    console.log('🧪 Testing checkbox functionality...');
+    orderedGroups.forEach(gname => {
+      const checkbox = document.getElementById(`checkbox-${gname}`);
+      if (checkbox) {
+        console.log(`✅ Checkbox found for ${gname}: checked=${checkbox.checked}`);
+        
+        // Test programmatic toggle
+        const originalState = checkbox.checked;
+        checkbox.checked = !originalState;
+        checkbox.dispatchEvent(new Event('change'));
+        
+        setTimeout(() => {
+          checkbox.checked = originalState;
+          checkbox.dispatchEvent(new Event('change'));
+        }, 100);
+      } else {
+        console.error(`❌ Checkbox NOT found for ${gname}`);
+      }
+    });
+  }, 500);
 }
 
 /* -------- Helpers de parsing -------- */
@@ -1033,11 +1143,35 @@ function getPotencia(pm) {
 }
 function postoGroupByName(rawName, pm) {
   const n = (rawName || '').toUpperCase();
-  if (/-FU\b/.test(n)) return 'FU';
-  if (/-FA\b/.test(n)) return 'FA';
-  if (/-RE\b/.test(n)) return 'RE';
+  console.log(`🔍 Classifying post: "${rawName}" -> "${n}"`);
+  
+  // Enhanced pattern matching for different naming conventions
+  if (/-FU\b|FU-|FU$|FUSÍVEL|FUSE/.test(n)) {
+    console.log(`🔴 Classified as FU: ${rawName}`);
+    return 'FU';
+  }
+  if (/-FA\b|FA-|FA$|FASE|PHASE/.test(n)) {
+    console.log(`🟤 Classified as FA: ${rawName}`);
+    return 'FA';
+  }
+  if (/-RE\b|RE-|RE$|RELIGADOR|RECLOSER/.test(n)) {
+    console.log(`🟢 Classified as RE: ${rawName}`);
+    return 'RE';
+  }
+  
   const pot = getPotencia(pm);
-  if (pot) return 'KVA';
+  if (pot) {
+    console.log(`⚡ Classified as KVA (power): ${rawName} (${pot})`);
+    return 'KVA';
+  }
+  
+  // Additional patterns for common electrical equipment
+  if (/TRANSFORMADOR|TRAFO|TRANSFORMER/.test(n)) {
+    console.log(`🔄 Classified as KVA (transformer): ${rawName}`);
+    return 'KVA';
+  }
+  
+  console.log(`⚫ Classified as OUTROS: ${rawName}`);
   return 'OUTROS';
 }
 
@@ -1437,7 +1571,10 @@ async function parseKML(text, cityHint = "") {
               postGroups[gName] = L.layerGroup(); 
               postOrder.push(gName);
               postGroups[gName].addTo(map); // Add to map by default
-              console.log(`Created postGroup for ${gName}`, postGroups[gName]);
+              console.log(`📍 Created NEW postGroup for ${gName}`, postGroups[gName]);
+              console.log(`📍 PostOrder now: [${postOrder.join(', ')}]`);
+            } else {
+              console.log(`📍 Adding to existing postGroup: ${gName}`);
             }
 
             const pot   = getPotencia(pm);
@@ -1702,6 +1839,15 @@ async function parseKMLOptimized(text, cityHint = "") {
       });
     }
 
+    // Show summary of created post groups
+    console.log('📊 POST GROUPS SUMMARY:');
+    console.log(`📊 Total groups created: ${postOrder.length}`);
+    postOrder.forEach(groupName => {
+      const count = postGroups[groupName] ? postGroups[groupName].getLayers().length : 0;
+      const color = POST_COLORS[groupName] || POST_COLORS.OUTROS;
+      console.log(`📊 ${groupName}: ${count} posts (color: ${color})`);
+    });
+    
     // Refresh controls
     renderLayersPanelLines();
     renderLayersPanelPosts();
@@ -1787,7 +1933,10 @@ function processPointOptimized(pm, point, keyIndex) {
       postGroups[gName] = L.layerGroup(); 
       postOrder.push(gName);
       postGroups[gName].addTo(map); // Add to map by default
-      console.log(`Created postGroup for ${gName}`, postGroups[gName]);
+      console.log(`📍 Created NEW postGroup for ${gName}`, postGroups[gName]);
+      console.log(`📍 PostOrder now: [${postOrder.join(', ')}]`);
+    } else {
+      console.log(`📍 Adding to existing postGroup: ${gName}`);
     }
 
     const pot = getPotencia(pm);
@@ -1971,24 +2120,166 @@ showAllBtn?.addEventListener("click", () => {
 });
 
 hideAllPostsBtn?.addEventListener("click", () => {
+  console.log('🔴 HIDE ALL POSTS button clicked');
+  console.log('🔴 postOrder:', postOrder);
+  console.log('🔴 Available postGroups:', Object.keys(postGroups));
+  
   postOrder.forEach((gname) => {
-    if (postGroups[gname]) map.removeLayer(postGroups[gname]);
+    console.log(`🔴 Processing group: ${gname}`);
+    
+    if (postGroups[gname] && map.hasLayer(postGroups[gname])) {
+      map.removeLayer(postGroups[gname]);
+      console.log(`✅ Hidden group: ${gname}`);
+    } else {
+      console.log(`⚠️ Group ${gname} not on map or doesn't exist`);
+    }
+    
     const cb = layersListPosts?.querySelector(`input[data-pg="${gname}"]`);
-    if (cb) cb.checked = false;
+    if (cb) {
+      cb.checked = false;
+      console.log(`✅ Unchecked: ${gname}`);
+    } else {
+      console.log(`❌ Checkbox not found for: ${gname}`);
+    }
   });
+  
   if (lod.keysContainer && map.hasLayer(lod.keysContainer)) {
     map.removeLayer(lod.keysContainer);
     lod.keysVisible = false;
   }
+  setStatus && setStatus('📍 Todos os grupos de postos foram ocultados');
 });
 showAllPostsBtn?.addEventListener("click", () => {
+  console.log('🟢 Showing all post groups');
   postOrder.forEach((gname) => {
-    if (postGroups[gname] && !map.hasLayer(postGroups[gname])) postGroups[gname].addTo(map);
+    if (postGroups[gname] && !map.hasLayer(postGroups[gname])) {
+      postGroups[gname].addTo(map);
+      console.log(`Shown group: ${gname}`);
+    }
     const cb = layersListPosts?.querySelector(`input[data-pg="${gname}"]`);
-    if (cb) cb.checked = true;
+    if (cb) {
+      cb.checked = true;
+      console.log(`Checked: ${gname}`);
+    }
   });
+  setStatus && setStatus('📍 Todos os grupos de postos estão visíveis');
   // Post markers are now managed through postGroups only
   // keysContainer is disabled
+});
+
+// Helper function to toggle FU group specifically
+function toggleFUGroup(show = null) {
+  const fuCheckbox = document.getElementById('checkbox-FU');
+  if (!fuCheckbox) return false;
+  
+  if (show !== null) {
+    fuCheckbox.checked = show;
+  } else {
+    fuCheckbox.checked = !fuCheckbox.checked;
+  }
+  
+  // Trigger the change event to execute the toggle logic
+  fuCheckbox.dispatchEvent(new Event('change'));
+  return fuCheckbox.checked;
+}
+
+// Global function for external access
+window.toggleFUPosts = toggleFUGroup;
+
+// Simple test function to verify DOM functionality
+window.testCheckboxCreation = function() {
+  console.log('🧪 TESTING CHECKBOX CREATION');
+  
+  const container = document.getElementById('postsLayersList');
+  if (!container) {
+    console.error('❌ Container not found!');
+    return;
+  }
+  
+  console.log('✅ Container found:', container);
+  
+  // Clear and test
+  container.innerHTML = '';
+  
+  // Create test checkbox
+  const testRow = document.createElement('div');
+  testRow.className = 'layer-item';
+  
+  const testCheckbox = document.createElement('input');
+  testCheckbox.type = 'checkbox';
+  testCheckbox.id = 'test-checkbox';
+  testCheckbox.checked = true;
+  
+  const testLabel = document.createElement('span');
+  testLabel.textContent = 'TEST';
+  
+  testRow.appendChild(testCheckbox);
+  testRow.appendChild(testLabel);
+  container.appendChild(testRow);
+  
+  console.log('✅ Test elements created');
+  
+  // Verify
+  setTimeout(() => {
+    const found = document.getElementById('test-checkbox');
+    console.log('🔍 Test checkbox found:', found ? 'YES' : 'NO');
+    if (found) {
+      console.log('🔍 Test checkbox details:', {
+        id: found.id,
+        type: found.type,
+        checked: found.checked
+      });
+    }
+  }, 100);
+};
+
+// Debug function to check checkbox status
+window.debugCheckboxes = function() {
+  console.log('🔍 DEBUGGING CHECKBOXES:');
+  console.log('📊 postOrder:', postOrder);
+  console.log('📊 postGroups keys:', Object.keys(postGroups));
+  
+  const postsContainer = document.getElementById('postsLayersList');
+  console.log('📊 postsLayersList element:', postsContainer);
+  
+  if (postsContainer) {
+    const checkboxes = postsContainer.querySelectorAll('input[type="checkbox"]');
+    console.log(`📊 Found ${checkboxes.length} checkboxes in container`);
+    
+    checkboxes.forEach((cb, index) => {
+      console.log(`📊 Checkbox ${index + 1}:`, {
+        id: cb.id,
+        checked: cb.checked,
+        dataset: cb.dataset,
+        hasChangeListener: cb.onchange !== null || cb._events
+      });
+    });
+  }
+  
+  postOrder.forEach(gname => {
+    const checkbox = document.getElementById(`checkbox-${gname}`);
+    const group = postGroups[gname];
+    const isOnMap = group && map.hasLayer(group);
+    
+    console.log(`📊 ${gname}:`, {
+      checkbox: checkbox ? 'Found' : 'NOT FOUND',
+      checked: checkbox ? checkbox.checked : 'N/A',
+      group: group ? 'Exists' : 'NOT FOUND',
+      onMap: isOnMap,
+      layerCount: group ? group.getLayers().length : 0
+    });
+  });
+};
+
+// Keyboard shortcut for FU toggle (F key)
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'f' || e.key === 'F') {
+    // Only if not typing in an input field
+    if (!e.target.matches('input, textarea, select')) {
+      e.preventDefault();
+      toggleFUGroup();
+    }
+  }
 });
 
 /* ----------------- Inicial ----------------- */
@@ -2155,28 +2446,84 @@ async function apiGetCity(id){
   if (!j.ok) throw new Error(j.error || 'Falha ao obter cidade');
   return j.data;
 }
-async function apiCreateCity({name, prefix, file}){
+async function apiCreateCity({name, prefix, file, onProgress}){
   const fd = new FormData();
   fd.append('action','create');
   fd.append('name', name);
   if (prefix) fd.append('prefix', prefix);
   if (file) fd.append('file', file, file.name);
-  const r = await fetch(API_CITIES, { method:'POST', body: fd });
-  const j = await r.json();
-  if (!j.ok) throw new Error(j.error || 'Falha ao criar cidade');
-  return j.data;
+  
+  // Create progress-enabled request
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    
+    // Upload progress tracking
+    if (onProgress && xhr.upload) {
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent);
+        }
+      });
+    }
+    
+    xhr.addEventListener('load', () => {
+      try {
+        const j = JSON.parse(xhr.responseText);
+        if (!j.ok) throw new Error(j.error || 'Falha ao criar cidade');
+        resolve(j.data);
+      } catch (err) {
+        reject(err);
+      }
+    });
+    
+    xhr.addEventListener('error', () => reject(new Error('Erro de rede durante upload')));
+    xhr.addEventListener('timeout', () => reject(new Error('Timeout durante upload')));
+    
+    xhr.open('POST', API_CITIES);
+    xhr.timeout = 300000; // 5 minutes timeout for large files
+    xhr.send(fd);
+  });
 }
-async function apiUpdateCity({id, name, prefix, file}){
+async function apiUpdateCity({id, name, prefix, file, onProgress}){
   const fd = new FormData();
   fd.append('action','update');
   fd.append('id', id);
   fd.append('name', name);
   if (prefix) fd.append('prefix', prefix);
   if (file) fd.append('file', file, file.name);
-  const r = await fetch(API_CITIES, { method:'POST', body: fd });
-  const j = await r.json();
-  if (!j.ok) throw new Error(j.error || 'Falha ao atualizar cidade');
-  return j.data;
+  
+  // Create progress-enabled request for updates too
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    
+    // Upload progress tracking
+    if (onProgress && xhr.upload) {
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent);
+        }
+      });
+    }
+    
+    xhr.addEventListener('load', () => {
+      try {
+        const j = JSON.parse(xhr.responseText);
+        if (!j.ok) throw new Error(j.error || 'Falha ao atualizar cidade');
+        resolve(j.data);
+      } catch (err) {
+        reject(err);
+      }
+    });
+    
+    xhr.addEventListener('error', () => reject(new Error('Erro de rede durante upload')));
+    xhr.addEventListener('timeout', () => reject(new Error('Timeout durante upload')));
+    
+    xhr.open('POST', API_CITIES);
+    xhr.timeout = 300000; // 5 minutes timeout for large files
+    xhr.send(fd);
+  });
 }
 async function apiDeleteCity(id){
   const fd = new FormData();
@@ -2328,10 +2675,61 @@ cityForm?.addEventListener('submit', async (e)=>{
 
   if (!name){ cityNameInput.focus(); return; }
 
+  // Client-side file validation for better UX
+  if (file) {
+    const maxSize = 50 * 1024 * 1024; // 50MB limit
+    if (file.size > maxSize) {
+      alert('Arquivo muito grande (máx. 50MB). Selecione um arquivo menor.');
+      return;
+    }
+    if (file.size < 10) {
+      alert('Arquivo muito pequeno (mín. 10 bytes). Verifique se o arquivo está correto.');
+      return;
+    }
+    // Check file extension
+    const name = file.name.toLowerCase();
+    if (!name.endsWith('.kml') && !name.endsWith('.kmz')) {
+      alert('Formato inválido. Envie apenas arquivos .kml ou .kmz');
+      return;
+    }
+  }
+
+  // UI elements for progress
+  const progressEl = document.getElementById('uploadProgress');
+  const progressFill = document.getElementById('progressFill');
+  const progressText = document.getElementById('progressText');
+  const submitBtn = document.getElementById('btnCitySave');
+  
+  // Show progress if there's a file to upload
+  if (file) {
+    progressEl.style.display = 'flex';
+    progressFill.style.width = '0%';
+    progressText.textContent = '0%';
+  }
+  
+  // Disable form during upload
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = file ? 'Enviando...' : 'Salvando...';
+  }
+
   try{
+    // Progress callback with file size info
+    const onProgress = (percent) => {
+      if (progressFill && progressText) {
+        progressFill.style.width = percent + '%';
+        if (file && file.size) {
+          const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+          progressText.textContent = `${percent}% (${sizeMB}MB)`;
+        } else {
+          progressText.textContent = percent + '%';
+        }
+      }
+    };
+
     let saved;
-    if (!id) saved = await apiCreateCity({name, prefix, file});
-    else     saved = await apiUpdateCity({id, name, prefix, file});
+    if (!id) saved = await apiCreateCity({name, prefix, file, onProgress});
+    else     saved = await apiUpdateCity({id, name, prefix, file, onProgress});
 
     _cities = await apiListCities();
     renderCities(citySearchInput?.value||'');
@@ -2340,6 +2738,13 @@ cityForm?.addEventListener('submit', async (e)=>{
   }catch(err){
     console.error(err);
     alert(err.message||'Erro ao salvar');
+  } finally {
+    // Reset UI state
+    if (progressEl) progressEl.style.display = 'none';
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Salvar';
+    }
   }
 });
 
