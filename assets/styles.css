@@ -1,0 +1,905 @@
+/* =========================================================
+   Mapa Lino — UI pública (responsiva)
+   ========================================================= */
+
+/* ---------- Reset básico ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; line-height: 1.5; }
+
+/* ---------- Tokens ---------- */
+:root{
+  /* Cores (light) */
+  --bg: #f1f3f6;
+  --surface: #ffffff;
+  --surface-2: #f7f8fa;
+  --text: #1f2328;
+  --muted: #6c7581;
+  --border: #d9dee5;
+  --primary: #0d6efd;
+  --primary-2: #3b82f6;
+  --danger: #e5484d;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md: 0 4px 18px rgba(0,0,0,.10);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,.18);
+  --radius: 10px;
+
+  /* Layout */
+  --sidebar-w: 300px;
+  --topbar-h: 56px;
+  --status-h: 36px;
+
+  /* Mobile: altura do footer em tempo real (fallback 72px) */
+  --footer-h: 72px;
+}
+
+/* Tema escuro por atributo no <html> ou <body> */
+[data-theme="dark"]{
+  --bg: #0e1117;
+  --surface: #161b22;
+  --surface-2: #1d2430;
+  --text: #e6edf3;
+  --muted: #9aa4b2;
+  --border: #2a323d;
+  --primary: #4ea1ff;
+  --primary-2: #60a5fa;
+  --danger: #ff5c6d;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+  --shadow-md: 0 4px 18px rgba(0,0,0,.40);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,.55);
+}
+
+/* ---------- Grid principal ---------- */
+body{
+  color: var(--text);
+  background: var(--bg);
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-rows: var(--topbar-h) 1fr var(--status-h);
+  grid-template-areas:
+    "sidebar topbar"
+    "sidebar main"
+    "sidebar status";
+}
+
+/* Áreas */
+.sidebar   { grid-area: sidebar; min-width: 0; }
+.topbar    { grid-area: topbar; }
+.content   { grid-area: main; min-height: 0; position: relative; }
+.statusbar { grid-area: status; }
+
+/* =========================================================
+   Sidebar
+   ========================================================= */
+.sidebar{
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.sidebar-header{
+  display:flex; align-items:center; gap:12px;
+  padding: 12px 14px; border-bottom:1px solid var(--border);
+  position: sticky; top:0; z-index: 5; background: var(--surface);
+}
+.brand{ display:flex; align-items:center; gap:10px; min-width:0; }
+.brand img{ width:40px; height:40px; border-radius: 10px; object-fit: cover; box-shadow: var(--shadow-sm); }
+.app-title{ margin:0; font-size:16px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.app-subtitle{ margin:2px 0 0; font-size:11px; color:var(--muted); text-transform: uppercase; letter-spacing:.4px; }
+
+.ghost-btn{
+  width:32px; height:32px; border:1px solid var(--border);
+  background: transparent; color: var(--muted);
+  border-radius: 8px; display:grid; place-items:center; cursor:pointer;
+}
+#closeSidebar{ display:none; }
+.ghost-btn:hover{ color: var(--primary); border-color: var(--primary); background: var(--surface-2); }
+
+.sidebar-sections{ padding: 14px; overflow: auto; }
+.panel-section{ display:flex; flex-direction:column; gap:10px; }
+.panel-section + .panel-section{ margin-top: 16px; }
+.panel-section h2{
+  margin:0; font-size:12px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+
+/* Cards/listas */
+.file-meta{
+  padding:10px 12px; border:1px solid var(--border); border-radius: 10px; background: var(--surface-2);
+}
+.meta-label{ font-size:11px; color: var(--muted); text-transform: uppercase; }
+.meta-value{ font-weight:700; }
+
+.layers-list{
+  max-height: 280px; overflow:auto; padding:6px;
+  background: var(--surface-2); border:1px solid var(--border); border-radius: 10px;
+}
+.layer-item{
+  display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px; cursor:pointer;
+}
+.layer-item:hover{ background: var(--surface); }
+.layer-item input[type="checkbox"]{ width:16px; height:16px; accent-color: var(--primary); cursor:pointer; }
+.layer-color{ width:14px; height:14px; border-radius: 3px; border:1px solid var(--border); }
+
+.empty{ text-align:center; padding:20px 10px; color: var(--muted); }
+
+/* Botões */
+.row{ display:flex; gap:8px; }
+.btn{
+  padding:8px 12px; border-radius: 10px; border:1px solid var(--border);
+  background: var(--surface); color: var(--text); cursor: pointer; font-weight: 600; font-size: 13px;
+  transition: .15s border-color, .15s background, .15s transform;
+}
+.btn:hover{ background: var(--surface-2); border-color: var(--primary); }
+.btn:active{ transform: translateY(1px); }
+
+/* Stats */
+.stats-grid{
+  list-style:none; margin:0; padding:0;
+  display:grid; grid-template-columns: repeat(3,1fr); gap:8px;
+}
+.stat{
+  background: var(--surface-2); border:1px solid var(--border); border-radius: 10px;
+  text-align:center; padding:12px 8px;
+}
+.stat-val{ font-size:24px; font-weight: 800; color: var(--primary); line-height:1; }
+.stat-lbl{ font-size:10px; color: var(--muted); text-transform: uppercase; letter-spacing:.4px; }
+
+/* Picker de cidades */
+.search.small{ position: relative; }
+#cityPickerSearch{
+  width:100%; height:38px; border-radius: 10px;
+  border:1px solid var(--border); background: var(--surface-2); color: var(--text);
+  padding: 0 12px 0 36px; outline: none; box-shadow: var(--shadow-sm);
+}
+.search.small::before{
+  content:""; position:absolute; left:12px; top:50%; transform:translateY(-50%);
+  width:16px; height:16px; background: var(--muted);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E") center/contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+#cityPickerSearch:focus{ background: var(--surface); border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 18%, transparent); }
+
+/* =========================================================
+   Topbar (busca de chave)
+   ========================================================= */
+.topbar{
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display:flex; align-items:center; gap: 12px; padding: 0 14px;
+  position: sticky; top: 0; z-index: 20;
+}
+.top-left, .top-right{ display:flex; align-items:center; gap:8px; }
+.top-brand{ display:none; align-items:center; gap:8px; text-decoration:none; color:inherit; }
+
+.icon-btn{
+  width:36px; height:36px; border:1px solid var(--border); border-radius:10px;
+  background: transparent; color: var(--muted); display:grid; place-items:center; cursor:pointer;
+}
+.icon-btn:hover{ color: var(--primary); border-color: var(--primary); background: var(--surface-2); }
+
+.top-center{ flex:1; max-width: 720px; }
+.search{ display:flex; gap:8px; }
+#searchInput{
+  flex:1; height:36px; border-radius: 10px;
+  border:1px solid var(--border); background: var(--surface-2); color: var(--text);
+  padding: 0 12px; outline:none;
+}
+#searchInput:focus{ background: var(--surface); border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 18%, transparent); }
+
+/* Dropdown de resultados (posicionado pelo JS) */
+.search-results{
+  position: fixed; left: 0; top: 0; width: 280px; display:none;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg);
+  max-height: 320px; overflow:auto; z-index: 9999; padding: 6px;
+}
+.search-results.show{ display:block; }
+.search-item{ padding: 8px 10px; border-bottom: 1px solid var(--border); border-radius:8px; cursor:pointer; }
+.search-item:last-child{ border-bottom:0; }
+.search-item:hover{ background: var(--surface-2); }
+
+/* =========================================================
+   Mapa + FABs
+   ========================================================= */
+.content{ background: var(--bg); }
+.map{ position:absolute; inset:0; }
+
+/* Leaflet mínimos */
+.leaflet-container{ font: inherit; }
+.leaflet-control-attribution{
+  background: var(--surface); color: var(--text);
+  border:1px solid var(--border); border-radius: 8px; padding: 2px 6px;
+}
+
+/* FABs */
+.map-fab-group{
+  position: absolute; right: 16px; bottom: 16px;
+  display:flex; flex-direction: column; gap: 8px; z-index: 400;
+}
+.fab{
+  width: 44px; height: 44px; border-radius: 12px;
+  border:1px solid var(--border); background: var(--surface); color: var(--muted);
+  display:grid; place-items:center; cursor:pointer; box-shadow: var(--shadow-md);
+  transition: .12s transform, .12s box-shadow, .12s background, .12s border-color, .12s color;
+}
+.fab:hover{ transform: translateY(-2px); box-shadow: var(--shadow-lg); color: var(--primary); border-color: var(--primary); }
+.fab[aria-pressed="true"]{ background: var(--primary); color:#fff; border-color: var(--primary); }
+
+/* =========================================================
+   Status bar
+   ========================================================= */
+.statusbar{
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display:grid; grid-template-columns: 1fr auto 1fr;
+  align-items:center; gap: 12px; padding: 0 14px; font-size: 12px; z-index: 19;
+}
+.status-left{ display:flex; align-items:center; gap:8px; }
+.status-dot{ width:7px; height:7px; border-radius:50%; background:#22c55e; }
+.developer-credit{ text-align:center; opacity:.95; }
+.developer-credit a{ color: var(--primary); text-decoration: none; font-weight: 800; }
+.status-right{ text-align:right; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; color: var(--muted); }
+
+/* =========================================================
+   Loading
+   ========================================================= */
+.loading{
+  position: fixed; inset: 0; display:none; place-items:center;
+  background: rgba(0,0,0,.65); backdrop-filter: blur(3px); z-index: 9998;
+}
+.loading[aria-hidden="false"], .loading.show{ display:grid; }
+.loading-box{
+  background: var(--surface); color: var(--text); border:1px solid var(--border);
+  border-radius: 14px; padding: 22px; text-align:center; box-shadow: var(--shadow-lg); min-width: 260px;
+}
+.loading-logo{ width:64px; height:64px; object-fit: contain; display:block; margin: 0 auto 10px; }
+
+/* =========================================================
+   Responsivo
+   ========================================================= */
+
+/* Tablet */
+@media (max-width: 1024px){
+  :root{ --sidebar-w: 280px; }
+}
+
+/* Mobile */
+@media (max-width: 768px){
+  /* rearranja o grid */
+  body{
+    grid-template-columns: 1fr;
+    grid-template-rows: var(--topbar-h) 1fr auto;
+    grid-template-areas:
+      "topbar"
+      "main"
+      "status";
+  }
+
+  /* sidebar vira off-canvas */
+  .sidebar{
+    position: fixed; left: 0; top: 0; bottom: 0;
+    width: min(86vw, 320px); transform: translateX(-100%);
+    transition: transform .25s ease; z-index: 30; box-shadow: var(--shadow-lg);
+  }
+  .sidebar.open{ transform: translateX(0); }
+  #closeSidebar{ display:grid; }
+
+  /* overlay para fechar */
+  body::before{
+    content:""; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+    opacity: 0; pointer-events: none; transition: .25s opacity; z-index: 25;
+  }
+  body.sidebar-open::before{ opacity: 1; pointer-events: auto; }
+
+  /* topbar compacta e com logo */
+  .topbar{ gap:10px; padding: 0 12px; display:grid; grid-template-columns: auto 1fr auto; }
+  .top-brand{ display:flex; }
+  .top-brand img{ width:28px; height:28px; border-radius: 8px; object-fit: cover; }
+
+  /* inputs e botões um pouco menores */
+  .icon-btn, .ghost-btn{ width:34px; height:34px; }
+  #searchInput{ height:34px; }
+
+  /* footer fixo no mobile */
+  #statusBar{
+    position: fixed; left:0; right:0; bottom:0;
+    padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+  }
+
+  /* dá espaço pro footer: mapa e FABs nunca ficam por baixo */
+  .content{ padding-bottom: calc(var(--footer-h) + 12px); }
+  .map-fab-group{ right: 12px; bottom: calc(12px + var(--footer-h)); gap: 8px; }
+  .fab{ width: 42px; height: 42px; border-radius: 10px; }
+}
+
+/* Telas bem pequenas */
+@media (max-width: 420px){
+  .stats-grid{ grid-template-columns: repeat(2,1fr); }
+  #filesUpdatedAt{ white-space: normal; line-height: 1.25; }
+}
+
+/* Acessibilidade */
+@media (prefers-reduced-motion: reduce){
+  *{ transition: none !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}
+
+/* Scrollbar (webkit) */
+::-webkit-scrollbar{ width: 8px; height: 8px; }
+::-webkit-scrollbar-track{ background: transparent; }
+::-webkit-scrollbar-thumb{ background: var(--border); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover{ background: color-mix(in oklab, var(--border) 60%, #000 40%); }
+
+/* =========================================================
+   Leaflet popups/labels (coerência com tema)
+   ========================================================= */
+.leaflet-popup-content-wrapper{
+  background: var(--surface); color: var(--text);
+  border:1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg);
+}
+.leaflet-popup-tip{ background: var(--surface); border:1px solid var(--border); }
+
+/* =========================
+   FIX: mapa x rodapé x sidebar/topbar
+   (cole no final do seu CSS)
+   ========================= */
+
+/* variável dinâmica da altura real do rodapé (ajustada via JS) */
+:root { --footer-h: var(--status-h, 36px); }
+
+/* garante que o main nunca cubra topbar/sidebar/rodapé */
+.content {
+  position: relative;
+  z-index: 0;                     /* mapa fica na base da pilha */
+  padding-bottom: var(--footer-h);/* cria espaço para o rodapé */
+}
+
+/* rodapé sempre por cima do mapa no mobile */
+@media (max-width: 768px) {
+  #statusBar.statusbar {
+    position: fixed !important;
+    left: 0; right: 0; bottom: 0;
+    z-index: 2000;                /* acima de tudo do mapa */
+  }
+
+  /* Leaflet: dá um “respiro” acima do rodapé */
+  .leaflet-bottom {
+    bottom: calc(var(--footer-h) + max(10px, env(safe-area-inset-bottom))) !important;
+  }
+
+  /* FABs sobem para não ficarem escondidos pelo rodapé */
+  .map-fab-group {
+    right: 12px;
+    bottom: calc(var(--footer-h) + max(12px, env(safe-area-inset-bottom))) !important;
+    gap: 8px;
+  }
+  .fab { width: 42px; height: 42px; }
+  .fab::before { width: 18px; height: 18px; }
+}
+
+/* Desktop: normaliza novamente */
+@media (min-width: 769px) {
+  #statusBar.statusbar { position: static !important; z-index: 1100; }
+  .leaflet-bottom { bottom: 0 !important; }
+  .map-fab-group { bottom: 16px !important; }
+}
+
+/* Segurança de pilhas: sidebar/topbar por cima dos controles do Leaflet */
+.sidebar { z-index: 1500; }
+.topbar  { z-index: 1500; }
+
+/* Mantém controles do Leaflet acima dos tiles, mas abaixo do rodapé */
+.leaflet-control-container { z-index: 900 !important; }
+.leaflet-pane,
+.leaflet-container { z-index: 0; }  /* tiles/camadas não sobrepõem UI */
+
+/* =========================================================
+   MOBILE FIX: footer acima do mapa + mapa encurta + FABs sobem
+   Cole este bloco NO FINAL do seu CSS
+   ========================================================= */
+@media (max-width: 768px) {
+  /* 1) Footer fixo, sempre por cima do mapa */
+  #statusBar {
+    position: fixed !important;
+    left: 0; right: 0; bottom: 0;
+    z-index: 4000;                    /* acima do Leaflet */
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+
+  /* 2) Dá espaço no conteúdo para o footer fixo */
+  .content {
+    /* cria “respiro” na área do mapa para o rodapé */
+    padding-bottom: calc(var(--status-h) + max(10px, env(safe-area-inset-bottom)));
+  }
+
+  /* 3) O mapa encurta para não ficar por baixo do footer */
+  #map, .map, .leaflet-container {
+    height: calc(
+      100% - var(--status-h) - max(10px, env(safe-area-inset-bottom))
+    ) !important;
+  }
+
+  /* 4) Sobe os controles do Leaflet (attribution/escala) */
+  .leaflet-bottom {
+    bottom: calc(var(--status-h) + 10px + env(safe-area-inset-bottom)) !important;
+  }
+
+  /* 5) Sobe o grupo de FABs para não colidir com o footer */
+  .map-fab-group {
+    right: 12px;
+    bottom: calc(var(--status-h) + 16px + env(safe-area-inset-bottom)) !important;
+    gap: 8px;
+    z-index: 3500; /* abaixo do footer, acima do mapa */
+  }
+
+  .fab { width: 42px; height: 42px; border-radius: 10px; }
+  .fab::before { width: 18px; height: 18px; }
+
+  /* (opcional) sidebar sobre o mapa com prioridade */
+  .sidebar { z-index: 3800; }
+
+  /* coordenadas somem no mobile (opcional) */
+  #statusBar .status-right { display: none !important; }
+}
+
+/* Telas muito pequenas: um pouco mais de respiro */
+@media (max-width: 420px) {
+  .content {
+    padding-bottom: calc(var(--status-h) + 14px + env(safe-area-inset-bottom));
+  }
+}
+
+/* =========================================================
+   MOBILE UX: footer flutuante p/ não atrapalhar navegação
+   ========================================================= */
+:root { --footer-gap: 0px; }              /* gap padrão = 0 */
+
+/* Quando instalado como PWA (standalone), zera o gap */
+@media (display-mode: standalone) {
+  :root { --footer-gap: 0px; }
+}
+
+/* Navegador mobile (≤768px): sobe o footer e dá respiro */
+@media (max-width: 768px) {
+  :root { --footer-gap: 12px; }           /* deixe 12–16px se preferir */
+
+  /* Footer “flutuante” acima da barra do navegador */
+  #statusBar {
+    position: fixed !important;
+    left: 8px; right: 8px;
+    bottom: calc(var(--footer-gap) + env(safe-area-inset-bottom));
+    z-index: 4000;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.25);
+    padding: 10px 12px;                   /* mantém visual */
+    height: auto;                         /* deixa crescer se quebrar linha */
+  }
+
+  /* Conteúdo do app “reserva” espaço para o footer flutuante */
+  .content {
+    padding-bottom: calc(
+      var(--status-h) + var(--footer-gap) + max(10px, env(safe-area-inset-bottom))
+    );
+  }
+
+  /* Mapa encurta para nunca ficar por baixo do footer */
+  #map, .map, .leaflet-container {
+    height: calc(
+      100% - var(--status-h) - var(--footer-gap) - max(10px, env(safe-area-inset-bottom))
+    ) !important;
+  }
+
+  /* Sobe controles padrão do Leaflet */
+  .leaflet-bottom {
+    bottom: calc(
+      var(--status-h) + var(--footer-gap) + 10px + env(safe-area-inset-bottom)
+    ) !important;
+  }
+
+  /* Sobe os FABs para não encostar no footer */
+  .map-fab-group {
+    right: 12px;
+    bottom: calc(
+      var(--status-h) + var(--footer-gap) + 16px + env(safe-area-inset-bottom)
+    ) !important;
+    gap: 8px;
+    z-index: 3500;
+  }
+
+  /* Coordernadas escondidas no mobile (opcional) */
+  #statusBar .status-right { display: none !important; }
+}
+
+/* Telas bem pequenas: mais respiro opcional */
+@media (max-width: 420px) {
+  :root { --footer-gap: 14px; }           /* um pouco mais de folga */
+}
+
+/* =========================================================
+   ADMIN — complementos (cidades, tabelas, forms, logo, etc.)
+   Cole no FINAL do assets/styles.css
+   ========================================================= */
+
+/* ---------- Cards genéricos (form/lista) ---------- */
+.card{
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 12px;
+  color: var(--text);
+}
+.card h4{ margin: 6px 0 10px; font-size: 14px; }
+
+/* ---------- Grid 2 colunas do modal de Cidades ---------- */
+.modal.modal-lg{ width: min(1024px, 96vw); }
+.modal-body.grid-2{
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 12px;
+}
+@media (max-width: 1024px){
+  .modal-body.grid-2{ grid-template-columns: 1fr; }
+}
+
+/* ---------- Formulário padrão ---------- */
+.form .field{ display:flex; flex-direction:column; gap:6px; margin-bottom:10px; }
+.form .field > span{ font-size:12px; color: var(--text-secondary); }
+.form input[type="text"],
+.form input[type="search"],
+.form input[type="file"]{
+  height: 38px; padding: 0 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 10px;
+  outline: none;
+}
+.form input[type="file"]{ padding: 6px 10px; height: auto; }
+.form input:focus{
+  border-color: var(--primary);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px rgba(13,110,253,.12);
+}
+.muted{ color: var(--text-secondary); font-size: 12px; }
+
+/* Linhas de ações do formulário/lista */
+.row.gap{ display:flex; gap:8px; }
+.row.spread{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
+.row.center{ align-items: center; }
+
+/* ---------- Tabela de cidades ---------- */
+.table-wrap{
+  margin-top: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: auto;
+  max-height: min(60vh, 520px);
+}
+.table{ width:100%; border-collapse: collapse; }
+.table thead th{
+  position: sticky; top: 0; z-index: 2;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  padding: 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.table tbody td{
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text);
+}
+.table tbody tr:hover{ background: var(--surface-2); }
+.right{ text-align: right; }
+
+/* Ações por linha (editar/carregar) */
+.row-actions{ display:flex; gap:6px; justify-content:flex-end; }
+.icon-link{
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 8px;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text);
+}
+.icon-link:hover{ background: var(--surface-2); }
+
+/* ---------- Busca compacta no cabeçalho da lista ---------- */
+.search.small{ position: relative; }
+.search.small input{
+  height: 34px; padding: 0 10px 0 36px;
+  border:1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+.search.small::before{
+  content:"";
+  position:absolute; left:12px; top:50%; transform: translateY(-50%);
+  width:16px; height:16px; background: var(--text-secondary);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7' fill='currentColor'/%3E%3Cpath d='M21 21l-4.35-4.35' stroke='currentColor' stroke-width='2'/%3E%3C/svg%3E") center/contain no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7' fill='currentColor'/%3E%3Cpath d='M21 21l-4.35-4.35' stroke='currentColor' stroke-width='2'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+
+/* ---------- Modal: confirmação de exclusão ---------- */
+#confirmDeleteCityDialog .modal-body{ padding: 14px 16px; }
+#confirmDeleteCityDialog .modal-footer{ border-top:1px solid var(--border); }
+
+/* ---------- Home Message (Admin) ---------- */
+.home-msg-card{
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: var(--shadow-sm);
+}
+.home-msg-title{
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 800;
+  display:flex; align-items:center; gap:8px;
+}
+.home-msg-label{ font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; display:block; }
+.home-msg-textarea{
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  outline: none;
+}
+.home-msg-textarea:focus{
+  border-color: var(--primary);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px rgba(96,165,250,.25);
+}
+.home-msg-save{
+  background: var(--primary);
+  color:#fff;
+  border: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+details.home-msg-details{
+  margin-top: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+details.home-msg-details > summary{
+  list-style: none; cursor: pointer; user-select: none;
+  padding: 10px 12px; font-weight: 700;
+}
+details.home-msg-details > summary::-webkit-details-marker{ display:none }
+.home-msg-preview-box{
+  background: var(--surface-2);
+  border-top: 1px dashed var(--border);
+  color: var(--text);
+  border-radius: 0 0 12px 12px;
+  padding: 12px 14px;
+  margin: 0 8px 10px;
+  white-space: pre-wrap;
+}
+
+/* ---------- Logo: mini-fab e botão inline ---------- */
+.brand-logo-wrap{ position: relative; width: 40px; height: 40px; flex: 0 0 40px; }
+.brand-logo-wrap #brandLogo{
+  width:100%; height:100%; object-fit:cover;
+  border-radius: var(--radius); box-shadow: var(--shadow-sm);
+  cursor: pointer; transition: transform .12s, box-shadow .12s;
+}
+.brand-logo-wrap #brandLogo:hover{ transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.mini-fab{
+  position: absolute; right: -6px; bottom: -6px;
+  width: 22px; height: 22px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); display: grid; place-items: center; box-shadow: var(--shadow-sm);
+}
+.mini-fab::before{
+  content: ""; width: 14px; height: 14px; background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12'/%3E%3C/svg%3E") center/contain no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+.brand-inline-btn{
+  height: 28px; padding: 0 12px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--text); font-weight: 600; font-size: 12px; box-shadow: var(--shadow-sm);
+}
+.brand-inline-btn:hover{ background: var(--primary); color:#fff; border-color: var(--primary); }
+
+/* Desktop mostra botão inline; mobile usa mini-fab */
+@media (min-width: 769px){ .brand-inline-btn{ display:inline-flex } .mini-fab{ display:none } }
+@media (max-width: 768px){ .brand-inline-btn{ display:none } .mini-fab{ display:grid } }
+
+/* ---------- Ícone “Cidades & Arquivos” (topbar) ---------- */
+#openCities.icon-btn{
+  position: relative;
+}
+#openCities.icon-btn::after{
+  content:""; position:absolute; inset:auto -2px -2px auto;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--primary); opacity:.35;
+}
+
+/* ---------- Modais: camadas, cidades, atalhos ---------- */
+.modal{ border: none; border-radius: 12px; padding: 0; background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg); }
+.modal::backdrop{ background: rgba(0,0,0,.65); backdrop-filter: blur(4px); }
+.modal-header{
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  display:flex; align-items:center; justify-content:space-between;
+}
+.modal-header h3{ margin: 0; font-size: 16px; font-weight: 700; }
+.modal-body{ padding: 14px 16px; }
+.modal-footer{
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex; justify-content: flex-end; gap: 10px;
+}
+
+/* ---------- Z-index para o mapa não sobrepor modais/FAB ---------- */
+.modal{ z-index: 5000; }
+.photo-panel{ z-index: 4500; }
+.map-fab-group{ z-index: 4200; }
+
+/* ---------- Ajustes responsivos já herdados + footer flutuante ----------
+   (mantém o patch que levantou o footer e subiu os FABs no mobile) */
+
+   /* =========================================================
+   INDEX — Alerta da Home (overlay + card)
+   ========================================================= */
+
+/* Overlay de fundo (cobre a tela toda) */
+.home-alert-wrap{
+  position: fixed;
+  inset: 0;
+  z-index: 11000;                    /* acima do mapa, modais e footer */
+  display: grid;
+  place-items: center;
+  background: rgba(0,0,0,.45);
+  backdrop-filter: blur(2px);
+  animation: ha-fade .18s ease-out;
+}
+@keyframes ha-fade { from { opacity: 0 } to { opacity: 1 } }
+
+/* Card do alerta */
+.home-alert{
+  width: min(520px, calc(100% - 32px));
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  padding: 16px;
+  transform: translateY(6px);
+  animation: ha-pop .2s ease-out forwards;
+}
+@keyframes ha-pop { to { transform: translateY(0) } }
+
+/* Cabeçalho do card */
+.home-alert header{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.home-alert .ha-icon{ font-size: 22px; line-height: 1 }
+.home-alert h3{
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+/* Corpo do card (mensagem) */
+.home-alert .ha-body{
+  font-size: 14px;
+  line-height: 1.45;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px dashed var(--border);
+}
+
+/* Rodapé do card (botões) */
+.home-alert footer{
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* Botões do card (reaproveitam tokens do tema) */
+.home-alert .btn{
+  border: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.home-alert .btn.ghost{
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+  opacity: .85;
+}
+.home-alert .btn.primary{
+  background: var(--primary);
+  color: #fff;
+  border: 0;
+}
+.home-alert .btn:hover{ filter: brightness(1.05); }
+.home-alert .btn:active{ transform: translateY(1px); }
+
+/* Click no “X” do header (usa o estilo dos icon-btn) */
+.home-alert header .ghost{
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: var(--text);
+}
+.home-alert header .ghost:hover{
+  background: var(--surface-2);
+}
+
+/* Responsivo (telefones) */
+@media (max-width: 420px){
+  .home-alert{ border-radius: 12px; padding: 14px }
+  .home-alert .ha-body{ font-size: 13px }
+}
+
+/* Segurança extra: se algum estilo antigo tiver vazado,
+   garante que o alerta nunca fique “preso” dentro do fluxo */
+.home-alert, .home-alert-wrap{ position: fixed; }
+
+/* ===== Rodapé enxuto ===== */
+.footer, .status-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  flex-wrap: nowrap;           /* NÃO quebrar linhas */
+}
+
+.status-wrap {                 /* wrapper do texto de status */
+  flex: 1 1 auto;
+  min-width: 0;                /* necessário p/ ellipsis funcionar em flex */
+}
+
+#statusText {
+  display: block;
+  white-space: nowrap;         /* 1 linha só */
+  overflow: hidden;
+  text-overflow: ellipsis;     /* reticências … */
+  max-width: 100%;
+}
+
+/* Créditos: esconda em telas pequenas (opcional) */
+.footer .credits {
+  white-space: nowrap;
+}
+@media (max-width: 768px) {
+  .footer .credits { display: none; }
+}

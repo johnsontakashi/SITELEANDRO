@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="manifest" href="manifest.webmanifest?v=1">
+<link rel="icon" id="favicon" href="assets/icons/icon-192.png" type="image/png">
+<!-- iOS / iPadOS -->
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GeoViewer">
+<!-- Android/Chrome (opcional, ajuda no meta-theme) -->
+<meta name="theme-color" content="#0d6efd">
+  <title>Mapa Lino — Admin</title>
+  <!-- Leaflet (CSS) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <!-- Seu CSS -->
+  <link rel="stylesheet" href="assets/styles.css?v=5" />
+  <!-- Favicon com id para ser atualizado junto da logo -->
+  <link id="favicon" rel="icon" type="image/png" href="assets/img/image.png" />
+</head>
+<body>
+
+  <!-- ========== SIDEBAR ESQUERDA (CONFIG / LISTAS) ========== -->
+  <aside class="sidebar" aria-label="Barra lateral">
+
+    <!-- Cabeçalho -->
+    <div class="sidebar-header">
+      <div class="brand">
+        <!-- LOGO -->
+        <div class="brand-logo-wrap">
+          <img id="brandLogo"
+               src="assets/img/image.png"
+               alt="Logo"
+               title="Clique para trocar (Shift+Clique restaura)"
+               tabindex="0" />
+          <!-- mini-fab (USADO NO MOBILE) -->
+          <button id="changeLogoBtn"
+                  class="mini-fab"
+                  type="button"
+                  aria-label="Trocar logo"></button>
+        </div>
+
+        <!-- TÍTULOS + BOTÃO INLINE (DESKTOP) -->
+        <div class="brand-text">
+          <div class="brand-titles">
+            <h1 class="app-title">Mapa Lino</h1>
+            <p class="app-subtitle">Painel de Controle</p>
+          </div>
+
+          <!-- botão inline; clique faz o mesmo que o mini-fab -->
+          <button id="changeLogoBtnInline"
+                  class="brand-inline-btn"
+                  type="button"
+                  aria-label="Trocar logo">
+            Trocar logo
+          </button>
+        </div>
+      </div>
+
+      <!-- input escondido para upload -->
+      <input type="file" id="logoFileInput" accept="image/*" hidden />
+
+      <!-- O X só aparece no mobile (CSS já cobre isso) -->
+      <button class="ghost-btn" id="closeSidebar" title="Fechar painel" aria-label="Fechar painel">✕</button>
+    </div>
+
+    <!-- Seções -->
+    <nav class="sidebar-sections" aria-label="Seções">
+
+      <!-- ========== MENSAGEM DA HOME ========== -->
+      <div class="home-msg-card">
+        <h3 class="home-msg-title">Mensagem da página inicial</h3>
+
+        <label class="home-msg-label" for="homeMsgText">Conteúdo</label>
+        <textarea id="homeMsgText" class="home-msg-textarea"
+                  placeholder="Escreva a mensagem que aparecerá na home…"></textarea>
+
+        <div class="row gap" style="margin-top:.5rem">
+          <button id="btnHomeMsgSave" class="home-msg-save">Salvar mensagem</button>
+          <span id="homeMsgStatus" class="muted"></span>
+        </div>
+
+        <details class="home-msg-details">
+          <summary>Pré-visualizar</summary>
+          <div class="home-msg-preview-box" id="homeMsgPreview">—</div>
+        </details>
+      </div>
+
+      <!-- ========== CAMADAS / ALIMENTADORES (LINHAS) ========== -->
+      <section class="panel-section" aria-labelledby="sec-layers">
+        <h2 id="sec-layers">🗂️ Camadas / Alimentadores</h2>
+
+        <div class="row gap">
+          <button id="hideAllLayers" class="btn">Ocultar todas</button>
+          <button id="showAllLayers" class="btn">Exibir todas</button>
+        </div>
+
+        <div id="layersList" class="layers-list" role="group" aria-label="Lista de camadas / alimentadores">
+          <div class="empty">
+            <div class="empty-ico">🗂️</div>
+            <p>Nenhuma camada carregada</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== CAMADAS / GRUPOS DE POSTOS ========== -->
+      <section class="panel-section" aria-labelledby="sec-posts">
+        <h2 id="sec-posts">📌 Grupos de Postos</h2>
+
+        <div class="row gap">
+          <button id="hideAllPosts" class="btn">Ocultar todas</button>
+          <button id="showAllPosts" class="btn">Exibir todas</button>
+        </div>
+
+        <div id="postsLayersList" class="layers-list" role="group" aria-label="Lista de grupos de postos">
+          <div class="empty">
+            <div class="empty-ico">📍</div>
+            <p>Nenhum posto carregado</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== ESTATÍSTICAS ========== -->
+      <section class="panel-section" aria-labelledby="sec-stats">
+        <h2 id="sec-stats">📊 Estatísticas</h2>
+        <ul class="stats-grid" role="list">
+          <li class="stat">
+            <div class="stat-ico">📍</div>
+            <div class="stat-val" id="markerCount">0</div>
+            <div class="stat-lbl">Marcadores</div>
+          </li>
+          <li class="stat">
+            <div class="stat-ico">📏</div>
+            <div class="stat-val" id="lineCount">0</div>
+            <div class="stat-lbl">Linhas</div>
+          </li>
+          <li class="stat">
+            <div class="stat-ico">⬡</div>
+            <div class="stat-val" id="polygonCount">0</div>
+            <div class="stat-lbl">Polígonos</div>
+          </li>
+        </ul>
+      </section>
+    </nav>
+  </aside>
+
+  <!-- ========== TOPO (BUSCA + ACESSIBILIDADE) ========== -->
+  <header id="topbar" class="topbar" role="banner">
+    <div class="top-left">
+      <button id="openSidebar" class="icon-btn" aria-label="Abrir painel">☰</button>
+
+      <a class="top-brand" href="#" aria-label="Mapa Lino">
+        <img id="brandLogoTop" src="assets/img/image.png" alt="Logo Mapa Lino" />
+      </a>
+    </div>
+
+    <div class="top-center" role="search">
+      <form id="searchForm" class="search" autocomplete="off">
+        <input id="searchInput" type="search" placeholder="Buscar local, bairro, cidade..." aria-label="Buscar localização" />
+        <button id="searchBtn" type="submit" class="icon-btn" aria-label="Buscar">🔎</button>
+      </form>
+      <div id="searchResults" class="search-results" role="listbox" aria-label="Resultados de busca"></div>
+    </div>
+
+    <div class="top-right" aria-label="Acessibilidade" role="group">
+      <button id="openCities" class="icon-btn" title="Cidades & Arquivos" aria-label="Gerenciar cidades e arquivos">🏙️</button>
+      <button id="themeToggle" class="icon-btn" title="Modo escuro" aria-pressed="false" aria-label="Alternar tema">🌙</button>
+    </div>
+  </header>
+
+  <!-- ========== CONTEÚDO PRINCIPAL / MAPA ========== -->
+  <main id="content" class="content" role="main">
+    <div id="map" class="map" aria-label="Mapa"></div>
+
+    <!-- Controles flutuantes do mapa -->
+    <div class="map-fab-group" aria-label="Controles do mapa" role="group">
+      <button id="toggleSatellite" class="fab" title="Vista satélite" aria-pressed="false">🛰️</button>
+      <button id="toggleTerrain" class="fab" title="Vista terreno" aria-pressed="false">🏔️</button>
+      <button id="zoomIn" class="fab" title="Aproximar">＋</button>
+      <button id="zoomOut" class="fab" title="Afastar">－</button>
+      <button id="locateMe" class="fab" title="Minha localização">📍</button>
+    </div>
+
+    <!-- Painel de fotos/detalhes -->
+    <aside id="photoPanel" class="photo-panel" aria-label="Detalhes do local" aria-hidden="true">
+      <header class="photo-header">
+        <h3>📸 Detalhes do local</h3>
+        <button id="closePhoto" class="icon-btn" aria-label="Fechar painel">✕</button>
+      </header>
+      <div id="photoContent" class="photo-content">
+        <div class="photo-empty">
+          <div class="empty-ico">🖼️</div>
+          <p>Clique em um marcador para ver detalhes</p>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ========== STATUS BAR ========== -->
+  <footer id="statusBar" class="statusbar" role="contentinfo" aria-live="polite">
+    <div class="status-left">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span id="statusText">Sistema pronto</span>
+    </div>
+
+    <div class="developer-credit">
+      <small>
+        <strong>Desenvolvido por</strong>
+         Leandro Lino © 2025
+      </small>
+    </div>
+
+    <div id="filesUpdatedAt" class="status-updates">
+      Últimas atualizações: —
+    </div>
+
+    <div id="coordinates" class="status-right" aria-label="Coordenadas do cursor">
+      Lat: 0.000000, Lon: 0.000000
+    </div>
+  </footer>
+
+  <!-- ========== LOADING OVERLAY ========== -->
+  <div id="loadingOverlay" class="loading" aria-hidden="true" aria-live="polite">
+    <div class="loading-box" role="alert">
+      <img id="loadingLogo" class="loading-logo" alt="" />
+      <p id="loadingText">Processando arquivo…</p>
+    </div>
+  </div>
+
+  <!-- ========== MODAL: CIDADES / ARQUIVOS ========== -->
+  <dialog id="citiesDialog" class="modal modal-lg" aria-labelledby="citiesTitle">
+    <header class="modal-header">
+      <h3 id="citiesTitle">🏙️ Cidades &amp; Arquivos</h3>
+      <button id="closeCities" class="icon-btn" aria-label="Fechar">✕</button>
+    </header>
+
+    <div class="modal-body grid-2">
+      <!-- Coluna esquerda: formulário -->
+      <form id="cityForm" class="form card" autocomplete="off">
+        <h4>Cadastro / Edição</h4>
+
+        <label class="field">
+          <span>Nome da cidade</span>
+          <input id="cityName" type="text" placeholder="Ex.: Araraquara" required />
+        </label>
+
+        <label class="field">
+          <span>Prefixo (opcional)</span>
+          <input id="cityPrefix" type="text" maxlength="6" placeholder="Ex.: ARA" />
+          <small class="muted">Se vazio, geramos automaticamente pelo nome.</small>
+        </label>
+
+        <label class="field">
+          <span>Arquivo KML/KMZ</span>
+          <input id="cityFile" type="file" accept=".kml,.kmz" />
+          <small class="muted">Envie para adicionar ou substituir o arquivo da cidade.</small>
+        </label>
+
+        <div class="row gap">
+          <button id="btnCityNew"    type="button" class="btn">Novo</button>
+          <button id="btnCitySave"   type="submit" class="btn primary">Salvar</button>
+          <button id="btnCityDelete" type="button" class="btn danger">Excluir</button>
+        </div>
+
+        <input type="hidden" id="cityId" />
+      </form>
+
+      <!-- Coluna direita: lista -->
+      <section class="card">
+        <div class="row spread center">
+          <h4>Lista de cidades</h4>
+          <div class="search small">
+            <input id="citySearch" type="search" placeholder="Buscar cidade…" aria-label="Buscar cidade">
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table" id="cityTable" aria-label="Cidades cadastradas">
+            <thead>
+              <tr>
+                <th style="width:40%">Cidade</th>
+                <th style="width:20%">Prefixo</th>
+                <th style="width:25%">Arquivo</th>
+                <th style="width:15%" class="right">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="cityList">
+              <!-- linhas via JS -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <footer class="modal-footer">
+      <button id="okCities" class="btn">Fechar</button>
+    </footer>
+  </dialog>
+
+  <!-- Template para linhas da tabela de cidades -->
+  <template id="cityRowTpl">
+    <tr>
+      <td data-col="name">-</td>
+      <td data-col="prefix">-</td>
+      <td data-col="file">-</td>
+      <td class="right">
+        <div class="row-actions">
+          <button class="icon-link" data-act="load" title="Carregar no mapa">📥</button>
+          <button class="icon-link" data-act="edit" title="Editar">✏️</button>
+        </div>
+      </td>
+    </tr>
+  </template>
+
+  <!-- Confirmação de exclusão -->
+  <dialog id="confirmDeleteCityDialog" class="modal" aria-labelledby="confirmDelTitle">
+    <header class="modal-header">
+      <h3 id="confirmDelTitle">Excluir cidade</h3>
+    </header>
+    <div class="modal-body">
+      <p>Tem certeza que deseja excluir <strong id="confirmDelCityName">esta cidade</strong> e seu arquivo?</p>
+    </div>
+    <footer class="modal-footer">
+      <button id="confirmDelCancel" class="btn">Cancelar</button>
+      <button id="confirmDelOk" class="btn danger">Excluir</button>
+    </footer>
+  </dialog>
+
+  <!-- ========== MODAL: AJUDA / ATALHOS ========== -->
+  <dialog id="shortcutsDialog" class="modal" aria-labelledby="shortcutsTitle">
+    <header class="modal-header">
+      <h3 id="shortcutsTitle">Atalhos rápidos</h3>
+      <button id="closeShortcuts" class="icon-btn" aria-label="Fechar">✕</button>
+    </header>
+    <div class="modal-body">
+      <ul class="kbd-list">
+        <li><kbd>/</kbd> Focar busca</li>
+        <li><kbd>G</kbd> Ir para minha localização</li>
+        <li><kbd>+</kbd>/<kbd>-</kbd> Zoom</li>
+        <li><kbd>L</kbd> Linhas de referência</li>
+        <li><kbd>T</kbd> Alternar tema escuro</li>
+      </ul>
+    </div>
+    <footer class="modal-footer">
+      <button id="okShortcuts" class="btn primary">Entendi</button>
+    </footer>
+  </dialog>
+
+  <!-- ====== CONFIG do editor da Mensagem da Home ====== -->
+  <script>
+    const ADMIN_MESSAGE_TOKEN = 'troque-este-token-seguro';
+
+    async function adminLoadHomeMessage(){
+      try{
+        const r = await fetch('api/message.php', { cache:'no-store' });
+        const j = await r.json();
+        const txt = (j?.data?.text || '');
+        const ta = document.getElementById('homeMsgText');
+        const prev = document.getElementById('homeMsgPreview');
+        if (ta) ta.value = txt;
+        if (prev) prev.innerHTML = txt.replace(/\n/g,'<br>');
+      }catch(e){}
+    }
+
+    async function adminSaveHomeMessage(){
+      const ta = document.getElementById('homeMsgText');
+      const st = document.getElementById('homeMsgStatus');
+      const prev = document.getElementById('homeMsgPreview');
+      const text = (ta?.value || '').trim();
+
+      try{
+        if (st) st.textContent = 'Salvando…';
+        const r = await fetch('api/message.php', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Admin-Token': ADMIN_MESSAGE_TOKEN
+          },
+          body: JSON.stringify({ text })
+        });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error||'Falha ao salvar');
+        if (st) st.textContent = '✅ Mensagem salva';
+        if (prev) prev.innerHTML = text.replace(/\n/g,'<br>');
+      }catch(err){
+        if (st) st.textContent = '❌ ' + (err.message||'Erro');
+      }finally{
+        setTimeout(()=> { if (st) st.textContent=''; }, 2500);
+      }
+    }
+
+    document.getElementById('btnHomeMsgSave')?.addEventListener('click', adminSaveHomeMessage);
+    document.getElementById('homeMsgText')?.addEventListener('input', (e)=>{
+      const prev = document.getElementById('homeMsgPreview');
+      if (prev) prev.innerHTML = (e.target.value||'').replace(/\n/g,'<br>');
+    });
+  </script>
+
+  <!-- ====== LOGO: upload no SERVIDOR (PHP) + restaurar padrão ====== -->
+  <script>
+  (async function () {
+    const DEFAULT_LOGO = 'assets/img/image.png';
+    const UPLOAD_URL = 'api/upload_logo.php';
+    const SERVER_LOGO = () => 'uploads/logo.png?' + Date.now(); // cache-bust
+
+    const img = document.getElementById('brandLogo');
+    const imgTop = document.getElementById('brandLogoTop');
+    const loadingLogo = document.getElementById('loadingLogo');
+    const favicon = document.getElementById('favicon');
+    const fileInput = document.getElementById('logoFileInput');
+    const btnFab = document.getElementById('changeLogoBtn');
+    const btnInline = document.getElementById('changeLogoBtnInline');
+
+    function applyLogo(src) {
+      if (img) img.src = src;
+      if (imgTop) imgTop.src = src;
+      if (loadingLogo) loadingLogo.src = src;
+      if (favicon) favicon.href = src;
+    }
+
+    async function loadServerLogo() {
+      // tenta carregar a logo do servidor; se 404, cai no padrão
+      try {
+        const res = await fetch('uploads/logo.png', { cache: 'no-store' });
+        if (res.ok) applyLogo(SERVER_LOGO());
+        else applyLogo(DEFAULT_LOGO);
+      } catch {
+        applyLogo(DEFAULT_LOGO);
+      }
+    }
+
+    async function uploadLogo(file) {
+      const fd = new FormData();
+      fd.append('logo', file);
+
+      try {
+        const resp = await fetch(UPLOAD_URL, { method: 'POST', body: fd });
+        const j = await resp.json();
+        if (!j.ok) throw new Error(j.error || 'Falha no upload');
+        // força recarregar a imagem recém-enviada
+        applyLogo(SERVER_LOGO());
+        alert('✅ Logo atualizada com sucesso!');
+      } catch (err) {
+        alert('❌ Erro ao enviar: ' + err.message);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadServerLogo();
+      adminLoadHomeMessage();
+    });
+
+    // Clique na logo (Shift = restaurar p/ padrão local)
+    img?.addEventListener('click', async (ev) => {
+      if (ev.shiftKey) {
+        if (confirm('Restaurar visualmente para a logo padrão (sem apagar do servidor)?')) {
+          applyLogo(DEFAULT_LOGO);
+        }
+        return;
+      }
+      fileInput?.click();
+    });
+
+    // Acessibilidade: Enter/Espaço abre upload
+    img?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        fileInput?.click();
+      }
+    });
+
+    // Botões que chamam o mesmo input
+    btnFab?.addEventListener('click', () => fileInput?.click());
+    btnInline?.addEventListener('click', () => fileInput?.click());
+
+    // Upload -> PHP
+    fileInput?.addEventListener('change', (ev) => {
+      const file = ev.target.files?.[0];
+      if (!file) return;
+
+      if (!file.type.startsWith('image/')) {
+        alert('Selecione uma imagem (PNG, JPG, WEBP, GIF, SVG).');
+        ev.target.value = '';
+        return;
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        alert('Imagem muito grande (máx. 2 MB).');
+        ev.target.value = '';
+        return;
+      }
+
+      uploadLogo(file);
+      ev.target.value = '';
+    });
+  })();
+  </script>
+
+  <!-- ========== LIBS & SEU SCRIPT ========== -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="assets/script.js?v=7"></script>
+</body>
+</html>

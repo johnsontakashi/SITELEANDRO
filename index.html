@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mapa Lino</title>
+
+  <link rel="manifest" href="manifest.webmanifest?v=1">
+  <link rel="icon" id="favicon" href="assets/icons/icon-192.png" type="image/png">
+
+  <!-- iOS / iPadOS -->
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="GeoViewer">
+
+  <!-- Android/Chrome -->
+  <meta name="theme-color" content="#0d6efd">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <link rel="stylesheet" href="assets/styles.css?v=3">
+  <link id="favicon" rel="icon" type="image/png" href="assets/img/image.png" />
+</head>
+<body>
+
+  <!-- ========== SIDEBAR (sem recursos de admin) ========== -->
+  <aside id="kmzSidebar" class="sidebar" aria-label="Menu lateral">
+    <!-- Cabeçalho -->
+    <div class="sidebar-header">
+      <div class="brand">
+        <img id="brandLogo" src="assets/img/image.png" alt="Logo" />
+        <div>
+          <h1 class="app-title">Mapa Lino</h1>
+          <p class="app-subtitle">Visualizador</p>
+        </div>
+      </div>
+      <!-- O X só aparece no mobile (CSS já cobre isso) -->
+      <button class="ghost-btn" id="closeSidebar" title="Fechar painel" aria-label="Fechar painel">✕</button>
+    </div>
+
+    <nav class="sidebar-sections" aria-label="Seções">
+      <!-- ========== CIDADES (picker) ========== -->
+      <section class="panel-section" aria-labelledby="sec-cities">
+        <h2 id="sec-cities">🌆 Cidades</h2>
+
+        <div class="row gap">
+          <div class="search small" style="flex:1">
+            <!-- busca de cidade/bairro fica aqui -->
+            <input id="cityPickerSearch" type="search" placeholder="Buscar cidade/bairro…" aria-label="Buscar cidade ou bairro" />
+          </div>        
+        </div>
+
+        <div id="cityPickerList" class="list-card" role="list" aria-label="Cidades disponíveis" style="margin-top:8px; max-height: 280px; overflow:auto;">
+          <!-- itens via JS -->
+          <div class="empty">
+            <div class="empty-ico">🏙️</div>
+            <p>Nenhuma cidade cadastrada</p>
+          </div>
+        </div>
+
+        <div class="file-meta" style="margin-top:10px">
+          <div class="meta-row">
+            <span class="meta-label">Arquivo atual:</span>
+            <span id="currentFile" class="meta-value">Nenhum</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== CAMADAS / ALIMENTADORES (LINHAS) ========== -->
+      <section class="panel-section" aria-labelledby="sec-layers">
+        <h2 id="sec-layers">🗂️ Camadas / Alimentadores</h2>
+
+        <div class="row gap">
+          <button id="hideAllLayers" class="btn">Ocultar todas</button>
+          <button id="showAllLayers" class="btn">Exibir todas</button>
+        </div>
+
+        <div id="layersList" class="layers-list" role="group" aria-label="Lista de camadas / alimentadores">
+          <div class="empty">
+            <div class="empty-ico">🗂️</div>
+            <p>Nenhuma camada carregada</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== CAMADAS / GRUPOS DE POSTOS ========== -->
+      <section class="panel-section" aria-labelledby="sec-posts">
+        <h2 id="sec-posts">📌 Grupos de Postos</h2>
+
+        <div class="row gap">
+          <button id="hideAllPosts" class="btn">Ocultar todas</button>
+          <button id="showAllPosts" class="btn">Exibir todas</button>
+        </div>
+
+        <div id="postsLayersList" class="layers-list" role="group" aria-label="Lista de grupos de postos">
+          <div class="empty">
+            <div class="empty-ico">📍</div>
+            <p>Nenhum posto carregado</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== ESTATÍSTICAS ========== -->
+      <section class="panel-section" aria-labelledby="sec-stats">
+        <h2 id="sec-stats">📊 Estatísticas</h2>
+        <ul class="stats-grid" role="list">
+          <li class="stat">
+            <div class="stat-ico">📍</div>
+            <div class="stat-val" id="markerCount">0</div>
+            <div class="stat-lbl">Marcadores</div>
+          </li>
+          <li class="stat">
+            <div class="stat-ico">📏</div>
+            <div class="stat-val" id="lineCount">0</div>
+            <div class="stat-lbl">Linhas</div>
+          </li>
+          <li class="stat">
+            <div class="stat-ico">⬡</div>
+            <div class="stat-val" id="polygonCount">0</div>
+            <div class="stat-lbl">Polígonos</div>
+          </li>
+        </ul>
+      </section>
+    </nav>
+  </aside>
+
+  <!-- ========== TOPO (busca) ========== -->
+  <header id="topbar" class="topbar" role="banner">
+    <div class="top-left">
+      <button id="openSidebar" class="icon-btn" aria-label="Abrir painel">☰</button>
+
+      <a class="top-brand" href="#" aria-label="Mapa Lino">
+        <img id="brandLogoTop" src="assets/img/image.png" alt="Logo Mapa Lino" />
+      </a>
+    </div>
+
+    <!-- MESMO INPUT: agora é para CHAVE com teclado numérico -->
+    <div class="top-center" role="search">
+      <form id="searchForm" class="search" autocomplete="off">
+        <input
+          id="searchInput"
+          type="tel"
+          inputmode="numeric"
+          pattern="\d*"
+          placeholder="Buscar CHAVE (só números, ex.: 27)"
+          aria-label="Buscar chave por número"
+          enterkeyhint="search"
+        />
+        <button id="searchBtn" type="submit" class="icon-btn" aria-label="Buscar">🔎</button>
+      </form>
+      <div id="searchResults" class="search-results" role="listbox" aria-label="Resultados de busca"></div>
+    </div>
+
+    <div class="top-right" aria-label="Acessibilidade" role="group">
+      <button id="themeToggle" class="icon-btn" title="Modo escuro" aria-pressed="false" aria-label="Alternar tema">🌙</button>
+    </div>
+  </header>
+
+  <!-- ========== CONTEÚDO / MAPA ========== -->
+  <main id="content" class="content" role="main">
+    <div id="map" class="map" aria-label="Mapa"></div>
+
+    <!-- Controles flutuantes -->
+    <div class="map-fab-group" aria-label="Controles do mapa" role="group">
+  <button id="toggleSatellite" class="fab" title="Vista satélite">🛰️</button>
+  <button id="toggleTerrain"  class="fab" title="Vista terreno">🏔️</button>
+  <button id="zoomIn"         class="fab" title="Aproximar">＋</button>
+  <button id="zoomOut"        class="fab" title="Afastar">－</button>
+  <button id="locateMe"       class="fab" title="Minha localização">📍</button>
+</div>
+
+  </main>
+
+  <!-- ========== STATUS BAR ========== -->
+  <footer id="statusBar" class="statusbar" role="contentinfo" aria-live="polite">
+    <div class="status-left">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span id="statusText">Sistema pronto</span>
+    </div>
+
+    <div class="developer-credit">
+      <small>
+        <strong>Desenvolvido por</strong>
+         Leandro Lino © 2025
+      </small>
+    </div>
+
+    <div id="filesUpdatedAt" class="status-updates" style="text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+      Últimas atualizações: —
+    </div>
+
+    <div id="coordinates" class="status-right" aria-label="Coordenadas do cursor">
+      Lat: 0.000000, Lon: 0.000000
+    </div>
+  </footer>
+
+  <!-- ========== LOADING ========== -->
+  <div id="loadingOverlay" class="loading" aria-hidden="true" aria-live="polite">
+    <div class="loading-box" role="alert">
+      <img id="loadingLogo" class="loading-logo" alt="" />
+      <p id="loadingText">Processando arquivo…</p>
+    </div>
+  </div>
+
+  <!-- ========== SCRIPTS EXTERNOS (sem script inline) ========== -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="assets/script.js?v=5"></script>
+    <script>
+    /* ========= Lista de cidades (lado público) ========= */
+    async function renderCityPicker(filter = '') {
+      const list = document.getElementById('cityPickerList');
+      const q = (filter || '').trim().toLowerCase();
+      try {
+        const items = await (window.apiListCities ? apiListCities() : Promise.resolve([]));
+        const rows = items
+          .filter(c => !q || c.name.toLowerCase().includes(q) || (c.prefix||'').toLowerCase().includes(q))
+          .sort((a,b)=> a.name.localeCompare(b.name));
+
+        if (!rows.length) {
+          list.innerHTML = '<div class="empty"><div class="empty-ico">🏙️</div><p>Nenhuma cidade cadastrada</p></div>';
+          return;
+        }
+        list.innerHTML = rows.map(c => `
+          <div class="city-item" role="listitem" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:var(--panel-2)">
+            <div style="min-width:0">
+              <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                ${c.name} ${c.isDefault ? '<span title="Cidade padrão" style="margin-left:6px">⭐</span>' : ''}
+              </div>
+              <small class="muted">Prefixo: <b>${c.prefix || ''}</b> • ${c.file?.name || 'sem arquivo'}</small>
+            </div>
+            <button class="btn" data-id="${c.id}">Carregar</button>
+          </div>
+        `).join('');
+        list.querySelectorAll('button[data-id]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            try {
+              await (window.loadCityOnMap ? loadCityOnMap(btn.dataset.id) : Promise.resolve());
+            } catch(e) { alert('Falha ao carregar cidade'); }
+          });
+        });
+      } catch (err) {
+        console.error(err);
+        list.innerHTML = '<div class="empty"><div class="empty-ico">⚠️</div><p>Erro ao listar cidades</p></div>';
+      }
+    }
+
+    /* ========= Alerta da home (mostra 1x por versão) ========= */
+    async function loadHomeMessageOnce() {
+      try {
+        const r = await fetch('api/message.php', { cache: 'no-store' });
+        const j = await r.json();
+        const text = (j?.data?.text || '').trim();
+        const updated = j?.data?.updated_at || '';
+        if (!text) return;
+
+        const sig = `${updated}|${text}`;
+        const KEY = 'home_msg_seen_sig_v1';
+        if (localStorage.getItem(KEY) === sig) return;
+
+        showHomeAlert(text, () => localStorage.setItem(KEY, sig));
+      } catch (e) {}
+    }
+    function showHomeAlert(message, onClose) {
+      const wrap = document.createElement('div');
+      wrap.className = 'home-alert-wrap';
+      wrap.setAttribute('role', 'dialog');
+      wrap.setAttribute('aria-modal', 'true');
+
+      const card = document.createElement('div');
+      card.className = 'home-alert';
+      card.innerHTML = `
+        <header>
+          <div class="ha-icon">📣</div>
+          <h3>Informação</h3>
+          <button class="btn ghost" aria-label="Fechar" style="margin-left:auto">✕</button>
+        </header>
+        <div class="ha-body">${message.replace(/\n/g,'<br>')}</div>
+        <footer>
+          <button class="btn ghost js-close">Fechar</button>
+          <button class="btn primary js-ok">Entendi</button>
+        </footer>
+      `;
+      wrap.appendChild(card);
+      document.body.appendChild(wrap);
+
+      const close = () => { wrap.remove(); if (typeof onClose === 'function') onClose(); };
+      card.querySelector('header .ghost')?.addEventListener('click', close);
+      card.querySelector('.js-close')?.addEventListener('click', close);
+      card.querySelector('.js-ok')?.addEventListener('click', close);
+      wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+      document.addEventListener('keydown', function onEsc(e){
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', onEsc); }
+      }, { once:true });
+    }
+
+    /* ========= Rodapé: últimas atualizações + autoload da padrão ========= */
+    function fmtWhen(ts){
+      if (!ts) return '—';
+      const d = new Date(ts * 1000);
+      const dd = String(d.getDate()).padStart(2,'0');
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const yyyy = d.getFullYear();
+      const HH = String(d.getHours()).padStart(2,'0');
+      const MM = String(d.getMinutes()).padStart(2,'0');
+      return `${dd}/${mm}/${yyyy} ${HH}:${MM}`;
+    }
+    function renderUpdatesFooter(cities){
+      const el = document.getElementById('filesUpdatedAt');
+      if (!el) return;
+
+      const withFile = (cities || []).filter(c => c.file && c.file.name);
+      if (!withFile.length){
+        el.textContent = 'Últimas atualizações: —';
+        el.removeAttribute('title');
+        return;
+      }
+      const parts = withFile
+        .sort((a,b)=> a.name.localeCompare(b.name))
+        .map(c => `${c.name}: ${fmtWhen(c.updatedAt)}`);
+      el.textContent = `Últimas atualizações: ${parts.join(' • ')}`;
+
+      const def = cities.find(x => x.isDefault);
+      if (def && def.defaultAt){
+        el.title = `Padrão: ${def.name} (desde ${fmtWhen(def.defaultAt)})`;
+      } else {
+        el.removeAttribute('title');
+      }
+    }
+    async function bootVisitorAutoload(){
+      try{
+        const cities = await (window.apiListCities ? apiListCities() : []);
+        renderUpdatesFooter(cities);
+
+        const def = cities.find(c => c.isDefault && c.file && c.file.url);
+        if (def){
+          await (window.loadCityOnMap ? loadCityOnMap(def.id) : Promise.resolve());
+          if (window.setStatus) setStatus(`⭐ Carregada cidade padrão: ${def.name}`);
+        }
+      }catch(e){}
+    }
+
+    /* ========= Eventos UI básicos ========= */
+    document.getElementById('btnRefreshCities')?.addEventListener('click', () =>
+      renderCityPicker(document.getElementById('cityPickerSearch')?.value)
+    );
+    document.getElementById('cityPickerSearch')?.addEventListener('input', (e) =>
+      renderCityPicker(e.target.value)
+    );
+
+    /* ========= Inicialização ========= */
+    document.addEventListener('DOMContentLoaded', () => {
+      renderCityPicker();
+      loadHomeMessageOnce();
+      bootVisitorAutoload();
+    });
+  </script>
+</body>
+</html>

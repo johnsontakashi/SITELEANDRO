@@ -1,0 +1,30 @@
+[
+    {
+        "id": "c_6525d54b77a4",
+        "name": "Araraquara",
+        "prefix": "ARA",
+        "file": {
+            "name": "Araraquara1.kmz",
+            "mime": "application\/zip",
+            "size": 697234,
+            "path": "C:\\xampp\\htdocs\\leandro\/uploads\/cities\/c_6525d54b77a4\/Araraquara1.kmz"
+        },
+        "updatedAt": 1760916675,
+        "isDefault": false,
+        "defaultAt": null
+    },
+    {
+        "id": "c_ebe84dbd2ad2",
+        "name": "Boa Esperança do Sul",
+        "prefix": "BOA",
+        "file": {
+            "name": "BOA_ESPERANCA_DO_SUL.kmz",
+            "mime": "application\/zip",
+            "size": 219930,
+            "path": "\/home\/u893433038\/domains\/mapalino.com.br\/public_html\/uploads\/cities\/c_ebe84dbd2ad2\/BOA_ESPERANCA_DO_SUL.kmz"
+        },
+        "updatedAt": 1761388619,
+        "isDefault": false,
+        "defaultAt": null
+    }
+]
