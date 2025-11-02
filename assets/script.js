@@ -1012,18 +1012,66 @@ function refreshCounters() {
   updateStats();
 }
 function renderLayersPanelLines() {
-  if (!layersListLines) return;
+  console.log('🔥 renderLayersPanelLines() CALLED');
+  console.log('🔍 layersListLines element:', layersListLines);
+  console.log('🔍 order array:', order);
+  console.log('🔍 colors object:', colors);
+  
+  if (!layersListLines) {
+    console.error('❌ layersListLines element not found!');
+    return;
+  }
+  
   layersListLines.innerHTML = "";
+  console.log('🧹 Cleared layersListLines content');
+  
   if (!order.length) {
+    console.log('📍 No layers to display - showing empty message');
     safeSetInnerHTML(layersListLines, `<div class="empty"><div class="empty-ico">🗂️</div><p>Nenhuma camada carregada</p></div>`);
     return;
   }
-  order.forEach((name) => {
+  
+  console.log(`📍 Creating ${order.length} layer items...`);
+  order.forEach((name, index) => {
+    console.log(`🔧 Creating layer item ${index + 1}/${order.length}: ${name}`);
+    
     const color = colors[name];
+    console.log(`🎨 Color for ${name}:`, color);
+    
     const row = document.createElement("label");
     row.className = "layer-item";
-    safeSetInnerHTML(row, `<input type="checkbox" checked data-af="${escapeHtml(name)}"><span class="layer-color" style="background:${escapeHtml(color)}"></span><span class="layer-name">${escapeHtml(name)}</span>`);
-    const cb = row.querySelector("input");
+    console.log(`📦 Created row element for ${name}`);
+    
+    // Create checkbox element directly to avoid sanitization
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = true;
+    checkbox.setAttribute("data-af", name);
+    checkbox.id = `checkbox-line-${name}`;
+    console.log(`✅ Created checkbox for ${name} with ID: ${checkbox.id}`);
+    
+    // Create color span
+    const colorSpan = document.createElement("span");
+    colorSpan.className = "layer-color";
+    colorSpan.style.background = color;
+    console.log(`🟦 Created color span for ${name}`);
+    
+    // Create name span
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "layer-name";
+    nameSpan.textContent = name;
+    console.log(`📝 Created name span for ${name}`);
+    
+    // Append all elements
+    row.appendChild(checkbox);
+    row.appendChild(colorSpan);
+    row.appendChild(nameSpan);
+    console.log(`🔗 Appended all elements to row for ${name}`);
+    console.log(`🔍 Row innerHTML after creation:`, row.innerHTML);
+    console.log(`🔍 Checkbox element:`, checkbox);
+    console.log(`🔍 Checkbox visible:`, checkbox.offsetWidth > 0 && checkbox.offsetHeight > 0);
+    
+    const cb = checkbox;
     if (cb) {
       cb.onchange = () => {
         try {
@@ -1045,8 +1093,69 @@ function renderLayersPanelLines() {
         }
       };
     }
+    
+    // Add animation class for smooth entrance effect
+    row.classList.add('animate-in');
     layersListLines.appendChild(row);
+    console.log(`📌 Added row to DOM for ${name}`);
+    
+    // Check if checkbox is visible after adding to DOM
+    setTimeout(() => {
+      const checkboxInDOM = document.getElementById(`checkbox-line-${name}`);
+      console.log(`🔍 Checkbox in DOM for ${name}:`, checkboxInDOM);
+      if (checkboxInDOM) {
+        const computedStyle = window.getComputedStyle(checkboxInDOM);
+        console.log(`🎨 Checkbox computed styles for ${name}:`, {
+          display: computedStyle.display,
+          visibility: computedStyle.visibility,
+          opacity: computedStyle.opacity,
+          width: computedStyle.width,
+          height: computedStyle.height,
+          position: computedStyle.position
+        });
+      }
+      row.classList.remove('animate-in');
+    }, 100);
   });
+  
+  console.log(`✨ Finished creating all ${order.length} layer items`);
+  
+  // Add a test checkbox to verify CSS is working
+  const testDiv = document.createElement('div');
+  testDiv.style.cssText = 'position: fixed; top: 10px; right: 10px; background: red; padding: 10px; z-index: 9999; color: white;';
+  testDiv.innerHTML = `
+    <div>TEST CHECKBOXES:</div>
+    <label style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
+      <input type="checkbox" checked style="width: 20px; height: 20px;"> Test 1
+    </label>
+    <label style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
+      <input type="checkbox" style="width: 20px; height: 20px;"> Test 2
+    </label>
+    <button onclick="this.parentElement.remove()" style="margin-top: 5px;">Close</button>
+  `;
+  document.body.appendChild(testDiv);
+  
+  // Alternative approach - try creating checkboxes with innerHTML
+  setTimeout(() => {
+    console.log('🔄 Testing alternative checkbox creation method...');
+    if (layersListLines && order.length > 0) {
+      const testName = order[0];
+      const testColor = colors[testName];
+      
+      // Create a test row with innerHTML method
+      const testRow = document.createElement('div');
+      testRow.innerHTML = `
+        <label class="layer-item" style="display: flex; align-items: center; gap: 10px; padding: 10px; border: 2px solid yellow;">
+          <input type="checkbox" checked style="width: 20px; height: 20px; border: 2px solid red; background: white;">
+          <span style="width: 16px; height: 16px; background: ${testColor}; border-radius: 4px;"></span>
+          <span>TEST ${testName}</span>
+        </label>
+      `;
+      
+      layersListLines.appendChild(testRow);
+      console.log('🧪 Added test row with innerHTML method');
+    }
+  }, 1000);
 }
 function renderLayersPanelPosts() {
   console.log('🔥 renderLayersPanelPosts() CALLED');
@@ -1169,8 +1278,15 @@ function renderLayersPanelPosts() {
       }
     });
     
+    // Add animation class for smooth entrance effect
+    row.classList.add('animate-in');
     layersListPosts.appendChild(row);
     console.log(`✅ Created checkbox for ${gname} group`);
+    
+    // Remove animation class after animation completes
+    setTimeout(() => {
+      row.classList.remove('animate-in');
+    }, 500);
     
     // Immediate verification
     const verification = document.getElementById(`checkbox-${gname}`);
