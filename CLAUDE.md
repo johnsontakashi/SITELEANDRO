@@ -50,6 +50,21 @@ php -S localhost:8000
 python -m http.server 8000
 ```
 
+### Common Development Commands
+```bash
+# Start development server
+php -S localhost:8000
+
+# Test PWA service worker (requires HTTPS or localhost)
+# Open browser dev tools → Application → Service Workers to verify registration
+
+# Check PHP syntax across all API files
+find api/ -name "*.php" -exec php -l {} \;
+
+# Validate JSON files
+find data/ uploads/cities/ -name "*.json" -exec python -m json.tool {} \; > /dev/null
+```
+
 ### Testing the Application
 - Access the public viewer at `/index.html`
 - Access the admin panel at `/admin.html`

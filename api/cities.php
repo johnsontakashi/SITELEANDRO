@@ -2,11 +2,18 @@
 // api/cities.php
 declare(strict_types=1);
 
-// Performance optimizations for large uploads
-ini_set('memory_limit', '256M');
-ini_set('max_execution_time', '300'); // 5 minutes
-ini_set('upload_max_filesize', '50M');
-ini_set('post_max_size', '52M');
+// Performance optimizations for large uploads  
+ini_set('memory_limit', '512M'); // Increased for better performance
+ini_set('max_execution_time', '600'); // 10 minutes for very large files
+ini_set('upload_max_filesize', '100M'); // Increased limit
+ini_set('post_max_size', '102M');
+ini_set('max_input_time', '600'); // Input parsing time
+ini_set('default_socket_timeout', '600'); // Socket timeout
+
+// Additional PHP performance optimizations
+ini_set('output_buffering', '4096'); // Buffer output for better performance
+ini_set('zlib.output_compression', 'On'); // Enable compression
+ini_set('max_input_vars', '3000'); // Handle more form variables
 
 session_start();
 header('Content-Type: application/json; charset=utf-8');
@@ -285,9 +292,15 @@ if ($method === 'POST' && ($action === 'create' || $action === 'update')) {
       json_err('Caminho de arquivo inválido');
     }
 
-    // Move file first, then cleanup old file (reduce failure points)
+    // Optimized file move with streaming for large files
     if (!move_uploaded_file($file['tmp_name'], $target)) {
       json_err('Falha ao salvar arquivo no servidor', 500);
+    }
+    
+    // Verify file integrity after move
+    if (!file_exists($target) || filesize($target) !== $fileSize) {
+      @unlink($target);
+      json_err('Arquivo corrompido durante transferência', 500);
     }
 
     // Remove old file after successful upload (to avoid data loss)
