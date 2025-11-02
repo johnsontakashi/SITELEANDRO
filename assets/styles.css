@@ -1297,6 +1297,48 @@ details.home-msg-details > summary::-webkit-details-marker{ display:none }
 }
 
 /* Ensure proper spacing in the posts list */
+
+/* ========= Leaflet Marker Cursor Fix ========= */
+/* Make all interactive map elements show pointer cursor */
+.leaflet-interactive {
+  cursor: pointer !important;
+}
+
+/* Specifically target circle markers */
+.leaflet-clickable {
+  cursor: pointer !important;
+}
+
+/* Canvas elements should show pointer when over interactive elements */
+.leaflet-zoom-animated .leaflet-interactive {
+  cursor: pointer !important;
+}
+
+/* SVG path elements for markers */
+.leaflet-interactive path {
+  cursor: pointer !important;
+}
+
+/* Fix for canvas renderer specifically */
+canvas.leaflet-zoom-animated {
+  cursor: inherit;
+}
+
+/* When hovering over markers, ensure pointer cursor */
+.leaflet-marker-pane .leaflet-marker-icon,
+.leaflet-marker-pane .leaflet-marker-shadow {
+  cursor: pointer !important;
+}
+
+/* Custom marker class for ensuring pointer cursor */
+.marker-clickable {
+  cursor: pointer !important;
+}
+
+/* Circle markers specifically */
+circle.marker-clickable {
+  cursor: pointer !important;
+}
 .layers-list .layer-item:first-child {
   margin-top: 2px;
 }

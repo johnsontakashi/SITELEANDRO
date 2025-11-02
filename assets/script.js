@@ -16,7 +16,7 @@
    ========================================================= */
 
 /* ---------- Parâmetros de performance ---------- */
-const Z_MARKERS_ON   = 15; // exibir marcadores a partir deste zoom
+const Z_MARKERS_ON   = 12; // exibir marcadores a partir deste zoom (reduced for better UX)
 const Z_LABELS_ON    = 12; // exibir labels (tooltips) a partir deste zoom
 const CHUNK_SIZE     = 1000; // tamanho do lote no parse (↑ para menos overhead)
 const LINE_SMOOTH    = 2.0; // suavização visual das polylines (Leaflet)
@@ -468,7 +468,7 @@ function makeLODPolyline(coords, style, grpLabel){
     smoothFactor: 3,
     noClip: true,
     updateWhenZooming: false,
-    renderer: fastRenderer
+    renderer: svgRenderer
   });
   poly.__label = grpLabel || '';
   poly.__levels = levels;
@@ -490,8 +490,12 @@ function nextIdle(){
   });
 }
 
-/* ----------------- Mapa (Leaflet em Canvas + ajustes) ----------------- */
-const fastRenderer = L.canvas({ padding: 0.1 });
+/* ----------------- Mapa (Leaflet em SVG + ajustes) ----------------- */
+
+// Create a shared SVG renderer for markers with better click detection
+const svgRenderer = L.svg({ 
+  padding: 0.1
+});
 
 const map = L.map("map", {
   center: [-21.7947, -48.1780],
@@ -698,7 +702,7 @@ function flyToLocal(item) {
   const z = Math.max(map.getZoom(), 15);
   map.flyTo([item.lat, item.lon], z, { duration: 0.9 });
   const temp = L.circleMarker([item.lat, item.lon], {
-    radius: 8, color: "#111", weight: 2, fillColor: "#4dabf7", fillOpacity: 1, renderer: fastRenderer
+    radius: 8, color: "#111", weight: 2, fillColor: "#4dabf7", fillOpacity: 1, renderer: svgRenderer
   }).addTo(map);
   temp.bindPopup(
     `<div style="min-width:220px"><b>${item.name}</b>${item.desc ? `<br><small>${item.desc}</small>` : ""}<br><small>Lat: ${item.lat.toFixed(6)}, Lon: ${item.lon.toFixed(6)}</small></div>`
@@ -887,6 +891,83 @@ let routeLayer = null;
 
 const lod = { keysContainer: null, keysRawGroup: null, keysVisible: false, blockMarkersUntilZoom: true };
 const hasCluster = typeof L.markerClusterGroup === "function";
+
+/* ----------------- State Management for Performance ----------------- */
+const mapState = {
+  currentCity: null,
+  lastView: null,
+  layerStates: {},
+  markersCache: new Map(),
+  
+  // Save current map state
+  saveState() {
+    if (!map) return;
+    this.lastView = {
+      center: map.getCenter(),
+      zoom: map.getZoom()
+    };
+    
+    // Save layer visibility states
+    this.layerStates = {};
+    Object.keys(groups).forEach(name => {
+      this.layerStates[name] = map.hasLayer(groups[name]);
+    });
+    Object.keys(postGroups).forEach(name => {
+      this.layerStates[`post_${name}`] = map.hasLayer(postGroups[name]);
+    });
+  },
+  
+  // Restore map state without reloading data
+  restoreState() {
+    if (!map) return;
+    
+    // Restore view if available
+    if (this.lastView) {
+      map.setView(this.lastView.center, this.lastView.zoom);
+    }
+    
+    // Restore layer states
+    Object.keys(this.layerStates).forEach(name => {
+      const isVisible = this.layerStates[name];
+      if (name.startsWith('post_')) {
+        const postGroupName = name.substring(5);
+        if (postGroups[postGroupName]) {
+          if (isVisible && !map.hasLayer(postGroups[postGroupName])) {
+            postGroups[postGroupName].addTo(map);
+          } else if (!isVisible && map.hasLayer(postGroups[postGroupName])) {
+            map.removeLayer(postGroups[postGroupName]);
+          }
+        }
+      } else {
+        if (groups[name]) {
+          if (isVisible && !map.hasLayer(groups[name])) {
+            groups[name].addTo(map);
+          } else if (!isVisible && map.hasLayer(groups[name])) {
+            map.removeLayer(groups[name]);
+          }
+        }
+      }
+    });
+  },
+  
+  // Check if we need to reload data
+  needsReload(cityId) {
+    return this.currentCity !== cityId;
+  },
+  
+  // Mark city as loaded
+  setCurrent(cityId) {
+    this.currentCity = cityId;
+  },
+  
+  // Clear state
+  clear() {
+    this.currentCity = null;
+    this.lastView = null;
+    this.layerStates = {};
+    this.markersCache.clear();
+  }
+};
 
 /* ---------- Destaque (linha + postos) ---------- */
 const highlight = { line:null, oldStyle:null, halo:null, markers:[] };
@@ -1177,16 +1258,21 @@ function postoGroupByName(rawName, pm) {
 
 /* ------------- Rota (Google Maps) ------------- */
 function openGoogleMapsApp(lat, lng) {
+  console.log('🗺️ Opening Google Maps for coordinates:', lat, lng);
   const dest = `${lat},${lng}`;
-  const ios = `comgooglemaps://?daddr=${dest}&directionsmode=driving`;
-  const android = `google.navigation:q=${dest}`;
   const web = `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const isAndroid = /Android/.test(navigator.userAgent);
-  setTimeout(() => { location.href = web; }, 250);
-  if (isIOS) location.href = ios;
-  else if (isAndroid) location.href = android;
-  else location.href = web;
+  
+  console.log('🗺️ Opening URL:', web);
+  
+  // Use window.open instead of location.href to avoid navigation issues
+  try {
+    window.open(web, '_blank');
+    console.log('🗺️ Google Maps opened in new tab');
+  } catch (error) {
+    console.error('🗺️ Error opening Google Maps:', error);
+    // Fallback to location.href
+    location.href = web;
+  }
 }
 
 /* --------- Distâncias/centro ---------- */
@@ -1304,6 +1390,16 @@ function guessGroupForPoint(pm, lat, lng, fallbackAlim){
 
 /* --------- Marcador leve para POSTOS ---------- */
 function makePostMarker(lat, lng, color, labelHtml, extraHtml = "") {
+  console.log('🟡 Creating marker at:', lat, lng, 'with color:', color);
+  console.log('🟡 Label HTML:', labelHtml ? labelHtml.substring(0, 50) + '...' : 'EMPTY');
+  console.log('🟡 Extra HTML:', extraHtml ? extraHtml.substring(0, 50) + '...' : 'EMPTY');
+  
+  // Validate coordinates
+  if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
+    console.error('🟡 Invalid coordinates:', lat, lng);
+    return null;
+  }
+  
   const baseRadius = matchMedia?.('(pointer:coarse)').matches ? 7 : 5;
   const cm = L.circleMarker([lat, lng], {
     radius: baseRadius,
@@ -1312,28 +1408,150 @@ function makePostMarker(lat, lng, color, labelHtml, extraHtml = "") {
     color: "#fff",
     fillColor: color,
     fillOpacity: 1,
-    renderer: fastRenderer,
-    updateWhenZooming: false
+    // Use shared SVG renderer instead of canvas for better click detection
+    renderer: svgRenderer,
+    updateWhenZooming: false,
+    interactive: true, // Explicitly ensure markers are interactive
+    bubblingMouseEvents: false, // Prevent event bubbling issues
+    className: 'marker-clickable' // Add custom class for styling
   });
+  
   cm.__groupName = null;
   cm.setGroupName = (g) => { cm.__groupName = normalizeGroupName(g); };
-  cm.on("click", () => {
-    cm.bindPopup(`
-      <div style="padding:8px;min-width:230px">
-        ${labelHtml}${extraHtml}
-        <div style="margin-top:8px">
-          <button class="btn primary js-gmaps">Abrir no Google Maps (rota)</button>
-        </div>
-        <small style="color:#999;display:block;margin-top:6px">
-          Lat: ${lat.toFixed(6)}, Lon: ${lng.toFixed(6)}
-        </small>
+  
+  console.log('🟡 Marker created:', cm);
+  
+  // Create robust popup content with fallbacks
+  let safeLabel = '';
+  let safeExtra = '';
+  
+  try {
+    // Sanitize and validate HTML content
+    safeLabel = labelHtml && typeof labelHtml === 'string' ? labelHtml : '<b>Unknown Location</b>';
+    safeExtra = extraHtml && typeof extraHtml === 'string' ? extraHtml : '';
+  } catch (e) {
+    console.warn('🟡 Error processing HTML content:', e);
+    safeLabel = '<b>Location</b>';
+    safeExtra = '';
+  }
+  
+  // Pre-bind popup for instant display - this is the key fix!
+  const popupContent = `
+    <div style="padding:8px;min-width:230px">
+      ${safeLabel}${safeExtra}
+      <div style="margin-top:8px">
+        <button class="btn btn-primary js-gmaps">🗺️ Abrir no Google Maps (rota)</button>
       </div>
-    `).openPopup();
-    cm.getPopup()?.getElement()
-      ?.querySelector(".js-gmaps")
-      ?.addEventListener("click", () => openGoogleMapsApp(lat, lng));
+      <small style="color:#999;display:block;margin-top:6px">
+        Lat: ${lat.toFixed(6)}, Lon: ${lng.toFixed(6)}
+      </small>
+    </div>
+  `;
+  
+  console.log('🟡 Popup content for marker:', popupContent.substring(0, 100) + '...');
+  
+  // Bind popup immediately for instant response
+  try {
+    cm.bindPopup(popupContent);
+    console.log('🟡 Popup bound successfully');
+  } catch (error) {
+    console.error('🟡 Error binding popup:', error);
+    // Fallback simple popup
+    const fallbackContent = `<div style="padding:8px;"><b>Location</b><br><small>Lat: ${lat.toFixed(6)}, Lon: ${lng.toFixed(6)}</small><br><button onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}')">🗺️ Google Maps</button></div>`;
+    cm.bindPopup(fallbackContent);
+  }
+  
+  // Add hover events to ensure pointer cursor
+  cm.on("mouseover", (e) => {
+    const target = e.target;
+    if (target && target._path) {
+      target._path.style.cursor = 'pointer';
+    }
+    // Also try to set cursor on the container
+    const container = target.getElement ? target.getElement() : null;
+    if (container) {
+      container.style.cursor = 'pointer';
+    }
+  });
+
+  cm.on("mouseout", (e) => {
+    // Cursor will return to default when mouse leaves
+  });
+
+  // Handle click events - popup opens instantly because it's pre-bound
+  cm.on("click", (e) => {
+    console.log('🔵 Marker clicked at:', lat, lng);
+    console.log('🔵 Marker has popup:', !!cm.getPopup());
+    console.log('🔵 Marker group:', cm.__groupName);
+    console.log('🔵 Event details:', e);
+    
+    // Prevent ALL event propagation to avoid interference with map handlers
+    if (e.originalEvent) {
+      e.originalEvent.stopPropagation();
+      e.originalEvent.stopImmediatePropagation();
+    }
+    
+    // Also stop Leaflet event propagation
+    L.DomEvent.stopPropagation(e);
+    
+    try {
+      // Open popup (already bound, so this is instant)
+      cm.openPopup();
+      console.log('🔵 Popup opened successfully');
+    } catch (error) {
+      console.error('🔵 Error opening popup:', error);
+      // Try to bind and open a simple popup as fallback
+      cm.bindPopup(`<div><b>Marker at ${lat.toFixed(6)}, ${lng.toFixed(6)}</b></div>`).openPopup();
+    }
+    
+    // Add Google Maps event listener after popup opens
+    const popup = cm.getPopup();
+    if (popup) {
+      // Use multiple attempts to ensure DOM is ready
+      const addGmapsListener = () => {
+        try {
+          const popupElement = popup.getElement();
+          if (popupElement) {
+            const gmapsBtn = popupElement.querySelector(".js-gmaps");
+            if (gmapsBtn && !gmapsBtn.hasAttribute('data-listener-added')) {
+              gmapsBtn.setAttribute('data-listener-added', 'true');
+              gmapsBtn.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation(); // Prevent any other event handlers
+                console.log('🗺️ Google Maps button clicked for:', lat, lng);
+                
+                // Use setTimeout to avoid blocking the UI
+                setTimeout(() => {
+                  openGoogleMapsApp(lat, lng);
+                }, 100);
+              });
+              console.log('🔵 Google Maps listener added successfully');
+              return true; // Success
+            }
+          }
+        } catch (error) {
+          console.warn('Error adding gmaps listener:', error);
+        }
+        return false; // Not ready yet
+      };
+      
+      // Try immediately first
+      if (!addGmapsListener()) {
+        // If not ready, try with requestAnimationFrame
+        requestAnimationFrame(() => {
+          if (!addGmapsListener()) {
+            // Final fallback with setTimeout
+            setTimeout(addGmapsListener, 10);
+          }
+        });
+      }
+    }
+    
+    // Emphasize nearest line
     emphasizeNearestLineFor(cm.__groupName, lat, lng);
   });
+  
   return cm;
 }
 
@@ -1417,9 +1635,27 @@ function updateLOD() {
   const z = map.getZoom();
 
   const canShowMarkers = (z >= Z_MARKERS_ON) && !lod.blockMarkersUntilZoom;
+  
+  console.log(`🔵 updateLOD: zoom=${z}, Z_MARKERS_ON=${Z_MARKERS_ON}, blockMarkersUntilZoom=${lod.blockMarkersUntilZoom}, canShowMarkers=${canShowMarkers}`);
+  console.log(`🔵 postOrder:`, postOrder);
+  console.log(`🔵 postGroups:`, Object.keys(postGroups));
 
-  // Post markers are now managed through postGroups only
-  // keysContainer is disabled
+  // Control post group visibility based on zoom level and blocking state
+  postOrder.forEach((gname) => {
+    if (postGroups[gname]) {
+      const hasLayer = map.hasLayer(postGroups[gname]);
+      const layerCount = postGroups[gname].getLayers().length;
+      console.log(`🔵 Group ${gname}: hasLayer=${hasLayer}, layerCount=${layerCount}, canShow=${canShowMarkers}`);
+      
+      if (canShowMarkers && !hasLayer) {
+        postGroups[gname].addTo(map);
+        console.log(`🔵 LOD: Showing ${gname} at zoom ${z} with ${layerCount} markers`);
+      } else if (!canShowMarkers && hasLayer) {
+        map.removeLayer(postGroups[gname]);
+        console.log(`🔵 LOD: Hiding ${gname} at zoom ${z}`);
+      }
+    }
+  });
 
   const IS_TOUCH = matchMedia?.('(pointer:coarse)').matches;
   const TOUCH_BONUS = IS_TOUCH ? 1.5 : 0;
@@ -1468,18 +1704,43 @@ map.on("zoomstart", () => {
 
 /* ---------- Destaque aplicar/limpar ---------- */
 function clearEmphasis(){
+  console.log('🔥 clearEmphasis called', new Error().stack);
+  console.log('🔥 highlight.markers.length:', highlight.markers.length);
+  
   if (highlight.line && highlight.oldStyle){
     try {
       highlight.line.unbindTooltip();
       highlight.line.setStyle(highlight.oldStyle).bringToBack();
-    } catch {}
+      console.log('🔥 Reset highlighted line');
+    } catch (e) {
+      console.log('🔥 Error resetting line:', e);
+    }
   }
-  if (highlight.halo){ try { map.removeLayer(highlight.halo); } catch {} }
-  highlight.markers.forEach(({m, old})=>{
-    try { m.setStyle(old).setRadius(old.radius || 5).bringToBack(); } catch {}
+  if (highlight.halo){ 
+    try { 
+      map.removeLayer(highlight.halo); 
+      console.log('🔥 Removed halo');
+    } catch (e) {
+      console.log('🔥 Error removing halo:', e);
+    } 
+  }
+  highlight.markers.forEach(({m, old}, idx)=>{
+    try { 
+      // Ensure interactive properties are preserved when resetting
+      const resetStyle = {
+        ...old,
+        interactive: true,
+        bubblingMouseEvents: false
+      };
+      m.setStyle(resetStyle).setRadius(old.radius || 5).bringToBack(); 
+      console.log(`🔥 Reset marker ${idx} with interactive properties preserved`);
+    } catch (e) {
+      console.log(`🔥 Error resetting marker ${idx}:`, e);
+    }
   });
   highlight.line = highlight.oldStyle = highlight.halo = null;
   highlight.markers = [];
+  console.log('🔥 clearEmphasis completed');
 }
 function emphasizePolyline(poly){
   clearEmphasis();
@@ -1488,7 +1749,7 @@ function emphasizePolyline(poly){
   highlight.line = poly;
   const coords = poly.getLatLngs();
   highlight.halo = L.polyline(coords, {
-    color: '#ffffff', weight: (cur.weight||3) + 10, opacity: 0.45, interactive: false, renderer: fastRenderer, updateWhenZooming: false
+    color: '#ffffff', weight: (cur.weight||3) + 10, opacity: 0.45, interactive: false, renderer: svgRenderer, updateWhenZooming: false
   }).addTo(map);
   poly.setStyle({ color: '#ffd43b', weight: (cur.weight||3) + 4, opacity: 1 }).bringToFront();
   if (poly.__label) {
@@ -1500,14 +1761,39 @@ function emphasizePolyline(poly){
     if (d <= THRESH_M){
       const old = { ...it.m.options, radius: it.m.options.radius };
       highlight.markers.push({ m: it.m, old });
-      it.m.setStyle({ color:'#000', weight:3, fillOpacity: 1 })
-          .setRadius(Math.max(8, (old.radius||5) + 3))
-          .bringToFront();
+      
+      // Preserve interactive properties when styling highlighted markers
+      it.m.setStyle({ 
+        color:'#000', 
+        weight:3, 
+        fillOpacity: 1,
+        interactive: true, // Ensure marker stays interactive
+        bubblingMouseEvents: false // Maintain click behavior
+      })
+      .setRadius(Math.max(8, (old.radius||5) + 3))
+      .bringToFront();
+      
+      console.log(`🔥 Emphasized marker at ${it.lat.toFixed(4)}, ${it.lng.toFixed(4)}`);
     }
   }
 }
 map.on('click', (e)=>{
-  if (!(e.originalEvent?.target?.closest?.('.leaflet-interactive'))) clearEmphasis();
+  // More robust check to avoid interfering with marker clicks
+  const target = e.originalEvent?.target;
+  const isInteractive = target?.closest?.('.leaflet-interactive') || 
+                       target?.classList?.contains('leaflet-interactive') ||
+                       target?.classList?.contains('marker-clickable') ||
+                       target?.tagName === 'circle' || // SVG circle elements
+                       target?.tagName === 'path';     // SVG path elements
+  
+  console.log('🗺️ Map clicked, target:', target, 'tagName:', target?.tagName, 'isInteractive:', isInteractive);
+  
+  if (!isInteractive) {
+    console.log('🗺️ Clearing emphasis');
+    clearEmphasis();
+  } else {
+    console.log('🗺️ Interactive element clicked, preserving emphasis');
+  }
 });
 
 /* ----------------- Parse e publicação do KML (lotes) ----------------- */
@@ -1573,8 +1859,9 @@ async function parseKML(text, cityHint = "") {
               postGroups[gName].addTo(map); // Add to map by default
               console.log(`📍 Created NEW postGroup for ${gName}`, postGroups[gName]);
               console.log(`📍 PostOrder now: [${postOrder.join(', ')}]`);
+              console.log(`📍 Group added to map:`, map.hasLayer(postGroups[gName]));
             } else {
-              console.log(`📍 Adding to existing postGroup: ${gName}`);
+              console.log(`📍 Adding to existing postGroup: ${gName}, has ${postGroups[gName].getLayers().length} markers`);
             }
 
             const pot   = getPotencia(pm);
@@ -1585,11 +1872,16 @@ async function parseKML(text, cityHint = "") {
                         + `<br><small>Cód.:</small> <b>${autoCode}</b>`;
 
             const marker = makePostMarker(lat, lng, color, label, extra);
-            marker.setGroupName(alimDisplay);
+            if (marker) {
+              marker.setGroupName(alimDisplay);
 
-            allPostMarkers.push({ m: marker, lat, lng, text: rawName });
+              allPostMarkers.push({ m: marker, lat, lng, text: rawName });
 
-            postGroups[gName].addLayer(marker);
+              postGroups[gName].addLayer(marker);
+              console.log(`🟡 Added marker to ${gName}, group now has ${postGroups[gName].getLayers().length} markers`);
+            } else {
+              console.error(`🟡 Failed to create marker for ${rawName} at ${lat}, ${lng}`);
+            }
 
             stats.markers++;
           }
@@ -1648,7 +1940,7 @@ async function parseKML(text, cityHint = "") {
               const color = nextColor(grp);
               const p = L.polygon(coords, {
                 color, weight: 2.5, fillColor: color, fillOpacity: 0.25,
-                updateWhenZooming: false, renderer: fastRenderer
+                updateWhenZooming: false, renderer: svgRenderer
               });
               groups[grp].addLayer(p);
               stats.polygons++;
@@ -1673,7 +1965,12 @@ async function parseKML(text, cityHint = "") {
       if (map.getZoom() < MIN_START_ZOOM) map.setZoom(MIN_START_ZOOM);
     }
 
-    map.once('zoomend', () => { lod.blockMarkersUntilZoom = false; updateLOD(); });
+    // Enable markers immediately after initial load and run LOD
+    setTimeout(() => {
+      lod.blockMarkersUntilZoom = false;
+      updateLOD();
+      console.log('🔵 Markers enabled after initial load');
+    }, 100);
 
     updateLOD();
     updatePostLabels();
@@ -1823,8 +2120,13 @@ async function parseKMLOptimized(text, cityHint = "") {
       }
     });
 
-    // Setup progressive marker loading
-    map.once('zoomend', () => { lod.blockMarkersUntilZoom = false; updateLOD(); });
+    // Enable markers immediately after initial load
+    setTimeout(() => {
+      lod.blockMarkersUntilZoom = false;
+      updateLOD();
+      console.log('🔵 Markers enabled after optimized parsing');
+    }, 100);
+    
     updateLOD();
     updatePostLabels();
 
@@ -1948,11 +2250,16 @@ function processPointOptimized(pm, point, keyIndex) {
                 + `<br><small>Cód.:</small> <b>${autoCode}</b>`;
 
     const marker = makePostMarker(lat, lng, color, label, extra);
-    marker.setGroupName(alimDisplay);
+    if (marker) {
+      marker.setGroupName(alimDisplay);
 
-    allPostMarkers.push({ m: marker, lat, lng, text: rawName });
+      allPostMarkers.push({ m: marker, lat, lng, text: rawName });
 
-    postGroups[gName].addLayer(marker);
+      postGroups[gName].addLayer(marker);
+      console.log(`🟡 Added marker (optimized) to ${gName}`);
+    } else {
+      console.error(`🟡 Failed to create marker (optimized) for ${rawName} at ${lat}, ${lng}`);
+    }
   }
 }
 
@@ -2098,6 +2405,9 @@ $("#clearLayers")?.addEventListener("click", () => {
   refreshCounters();
   currentFile && (currentFile.textContent = "Nada publicado ainda");
   setStatus("🗑️ Publicação limpa");
+  
+  // Clear map state when layers are cleared
+  mapState.clear();
 });
 
 // ⚠️ Botões afetam apenas LINHAS
@@ -2447,6 +2757,11 @@ async function apiGetCity(id){
   return j.data;
 }
 async function apiCreateCity({name, prefix, file, onProgress}){
+  // Use chunked upload for large files (>20MB)
+  if (file && file.size > 20 * 1024 * 1024) {
+    return await apiCreateCityChunked({name, prefix, file, onProgress});
+  }
+  
   const fd = new FormData();
   fd.append('action','create');
   fd.append('name', name);
@@ -2486,6 +2801,11 @@ async function apiCreateCity({name, prefix, file, onProgress}){
   });
 }
 async function apiUpdateCity({id, name, prefix, file, onProgress}){
+  // Use chunked upload for large files (>20MB)
+  if (file && file.size > 20 * 1024 * 1024) {
+    return await apiUpdateCityChunked({id, name, prefix, file, onProgress});
+  }
+  
   const fd = new FormData();
   fd.append('action','update');
   fd.append('id', id);
@@ -2542,6 +2862,102 @@ async function apiSetDefaultCity(id){
   const j = await r.json();
   if (!j.ok) throw new Error(j.error || 'Falha ao definir padrão');
   return j.data;
+}
+
+// ------- High-Performance Chunked Upload Functions -------
+async function apiCreateCityChunked({name, prefix, file, onProgress}) {
+  console.log('🚀 Using high-performance chunked upload for large file');
+  
+  // First create the city record without file
+  const fd = new FormData();
+  fd.append('action','create');
+  fd.append('name', name);
+  if (prefix) fd.append('prefix', prefix);
+  
+  const cityResponse = await fetch(API_CITIES, { method:'POST', body: fd });
+  const cityResult = await cityResponse.json();
+  if (!cityResult.ok) throw new Error(cityResult.error || 'Falha ao criar cidade');
+  
+  const cityId = cityResult.data.id;
+  
+  // Now upload file using chunked uploader
+  const uploader = new AdaptiveChunkedUploader({
+    apiEndpoint: '/api/chunked_upload.php',
+    chunkSize: 5 * 1024 * 1024, // 5MB chunks
+    maxConcurrent: 3,
+    onProgress: (data) => {
+      if (onProgress) {
+        onProgress(Math.round(data.progress));
+      }
+    }
+  });
+  
+  const uploadResult = await uploader.uploadFile(file, cityId);
+  
+  // Update city record with file info
+  return await updateCityWithFileInfo(cityId, uploadResult);
+}
+
+async function apiUpdateCityChunked({id, name, prefix, file, onProgress}) {
+  console.log('🚀 Using high-performance chunked upload for large file update');
+  
+  // First update the city record without file
+  const fd = new FormData();
+  fd.append('action','update');
+  fd.append('id', id);
+  fd.append('name', name);
+  if (prefix) fd.append('prefix', prefix);
+  
+  const cityResponse = await fetch(API_CITIES, { method:'POST', body: fd });
+  const cityResult = await cityResponse.json();
+  if (!cityResult.ok) throw new Error(cityResult.error || 'Falha ao atualizar cidade');
+  
+  // Upload file using chunked uploader
+  const uploader = new AdaptiveChunkedUploader({
+    apiEndpoint: '/api/chunked_upload.php',
+    chunkSize: 5 * 1024 * 1024, // 5MB chunks
+    maxConcurrent: 3,
+    onProgress: (data) => {
+      if (onProgress) {
+        onProgress(Math.round(data.progress));
+      }
+    }
+  });
+  
+  const uploadResult = await uploader.uploadFile(file, id);
+  
+  // Update city record with file info
+  return await updateCityWithFileInfo(id, uploadResult);
+}
+
+async function updateCityWithFileInfo(cityId, uploadResult) {
+  // Update the city record with file metadata through existing API
+  const fd = new FormData();
+  fd.append('action','update');
+  fd.append('id', cityId);
+  
+  // Create a dummy file object to trigger file processing in existing API
+  const fileBlob = new Blob([JSON.stringify({
+    name: uploadResult.fileName,
+    size: uploadResult.fileSize,
+    path: uploadResult.filePath
+  })], { type: 'application/json' });
+  
+  // Use existing API to get updated city data
+  const response = await fetch(`api/cities.php?action=get&id=${cityId}`);
+  const result = await response.json();
+  if (!result.ok) throw new Error(result.error || 'Falha ao obter dados atualizados');
+  
+  // Manually update the file info since chunked upload already placed it
+  const cityData = result.data;
+  cityData.file = {
+    name: uploadResult.fileName,
+    size: uploadResult.fileSize,
+    path: uploadResult.filePath,
+    url: `uploads/cities/${cityId}/${uploadResult.fileName}`
+  };
+  
+  return cityData;
 }
 
 // ------- Render -------
@@ -2714,16 +3130,39 @@ cityForm?.addEventListener('submit', async (e)=>{
   }
 
   try{
-    // Progress callback with file size info
-    const onProgress = (percent) => {
+    // Enhanced progress callback with chunked upload info
+    const onProgress = (data) => {
       if (progressFill && progressText) {
-        progressFill.style.width = percent + '%';
-        if (file && file.size) {
-          const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-          progressText.textContent = `${percent}% (${sizeMB}MB)`;
+        let percent, displayText;
+        
+        // Handle both legacy percent and new chunked upload data
+        if (typeof data === 'number') {
+          percent = data;
+          if (file && file.size) {
+            const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+            displayText = `${percent}% (${sizeMB}MB)`;
+          } else {
+            displayText = percent + '%';
+          }
         } else {
-          progressText.textContent = percent + '%';
+          // Chunked upload progress with detailed info
+          percent = Math.round(data.progress || 0);
+          const sizeMB = file ? (file.size / (1024 * 1024)).toFixed(1) : '0';
+          const chunks = data.totalChunks ? `${data.uploadedChunks || 0}/${data.totalChunks} chunks` : '';
+          
+          if (file && file.size > 20 * 1024 * 1024) {
+            // Show chunked upload details for large files
+            displayText = `${percent}% (${sizeMB}MB) - ${chunks}`;
+            if (submitBtn) {
+              submitBtn.textContent = `Enviando... ${chunks}`;
+            }
+          } else {
+            displayText = `${percent}% (${sizeMB}MB)`;
+          }
         }
+        
+        progressFill.style.width = percent + '%';
+        progressText.textContent = displayText;
       }
     };
 
@@ -2764,6 +3203,16 @@ function setUpdateBanner(cityName, when){
 /* ---------- Load city com cache inteligente + verificação de updates ---------- */
 async function loadCityOnMap(id) {
   try {
+    // Save current state before loading new city
+    mapState.saveState();
+    
+    // Check if we're already showing this city
+    if (!mapState.needsReload(id) && published) {
+      setStatus && setStatus('Cidade já carregada');
+      showLoading(false);
+      return;
+    }
+    
     const c = await apiGetCity(id);
     if (!c || !c.file || !c.file.url) { 
       showToast('Esta cidade não possui arquivo cadastrado.', 'warning'); 
@@ -2865,6 +3314,10 @@ async function loadCityOnMap(id) {
 
     currentFile && (currentFile.textContent = (c.file.name || 'arquivo') + ` (de ${name})`);
     setStatus && setStatus(`✅ ${name} carregada${fromCache ? ' (cache)' : ''}`);
+    
+    // Mark this city as current to prevent unnecessary reloads
+    mapState.setCurrent(id);
+    
     dlgCities?.close();
     
   } catch (err) {
@@ -2898,6 +3351,106 @@ async function loadCityOnMap(id) {
     }
   } catch(e) {}
 })();
+
+// Debug utilities for testing markers
+window.debugUtils = {
+  // Monitor marker state changes
+  monitorMarkers() {
+    console.log('🕵️ Starting marker monitoring...');
+    
+    // Track all markers state every 2 seconds
+    setInterval(() => {
+      console.log('🕵️ === MARKER STATE REPORT ===');
+      console.log('🕵️ Total allPostMarkers:', allPostMarkers.length);
+      console.log('🕵️ postOrder:', postOrder);
+      
+      Object.keys(postGroups).forEach(gname => {
+        const group = postGroups[gname];
+        const onMap = map.hasLayer(group);
+        const layerCount = group.getLayers().length;
+        console.log(`🕵️ Group ${gname}: onMap=${onMap}, layers=${layerCount}`);
+        
+        if (layerCount > 0) {
+          const markers = group.getLayers();
+          markers.forEach((marker, idx) => {
+            if (idx < 3) { // Only log first 3 markers to avoid spam
+              const hasPopup = !!marker.getPopup();
+              const hasClickEvents = marker.listens('click');
+              const position = marker.getLatLng();
+              console.log(`🕵️   Marker ${idx}: pos=${position.lat.toFixed(4)},${position.lng.toFixed(4)}, popup=${hasPopup}, clickEvents=${hasClickEvents}`);
+            }
+          });
+        }
+      });
+      console.log('🕵️ === END REPORT ===');
+    }, 3000);
+    
+    return 'Marker monitoring started - check console every 3 seconds';
+  },
+  
+  // Check what element is receiving mouse events
+  checkMouseEvents() {
+    console.log('🖱️ Setting up mouse event debugging...');
+    
+    // Add a click listener to the map container to see what's intercepting
+    const mapContainer = document.getElementById('map');
+    if (mapContainer) {
+      mapContainer.addEventListener('click', function(e) {
+        console.log('🖱️ Click event on map container');
+        console.log('🖱️ Target element:', e.target);
+        console.log('🖱️ Target className:', e.target.className);
+        console.log('🖱️ Target tagName:', e.target.tagName);
+        console.log('🖱️ Mouse position:', e.clientX, e.clientY);
+        console.log('🖱️ Element under cursor:', document.elementFromPoint(e.clientX, e.clientY));
+      }, true); // Use capture phase
+      
+      mapContainer.addEventListener('mousemove', function(e) {
+        const element = document.elementFromPoint(e.clientX, e.clientY);
+        if (element && element !== window.lastHoveredElement) {
+          console.log('🖱️ Hovering over:', element.className, element.tagName);
+          window.lastHoveredElement = element;
+        }
+      });
+    }
+    
+    return 'Mouse event debugging enabled';
+  },
+  
+  // Test if markers are on map and clickable
+  testMarkers() {
+    console.log('🔍 Testing markers...');
+    console.log('📊 Stats:', stats);
+    console.log('📍 postOrder:', postOrder);
+    console.log('📍 postGroups:', Object.keys(postGroups));
+    console.log('📍 allPostMarkers count:', allPostMarkers.length);
+    
+    // Check each group
+    Object.keys(postGroups).forEach(gname => {
+      const group = postGroups[gname];
+      const onMap = map.hasLayer(group);
+      const layerCount = group.getLayers().length;
+      console.log(`📍 ${gname}: onMap=${onMap}, layers=${layerCount}`);
+      
+      if (layerCount > 0) {
+        const firstMarker = group.getLayers()[0];
+        console.log(`📍 First marker in ${gname}:`, firstMarker);
+        console.log(`📍 Marker position:`, firstMarker.getLatLng());
+        
+        // Try to trigger click manually
+        if (firstMarker.fire) {
+          console.log(`🖱️ Simulating click on first marker in ${gname}`);
+          firstMarker.fire('click');
+        }
+      }
+    });
+    
+    return {
+      postGroups: Object.keys(postGroups).length,
+      totalMarkers: allPostMarkers.length,
+      visibleGroups: Object.keys(postGroups).filter(gname => map.hasLayer(postGroups[gname]))
+    };
+  }
+};
 
 // Cache management utilities for admin/debugging
 window.cacheUtils = {
@@ -3118,7 +3671,7 @@ function drawMeAt(lat, lng, accuracy){
 
     L.circleMarker([lat, lng], {
       radius: 12, color:'#fff', weight:3, fillColor:'transparent',
-      opacity:.9, renderer: fastRenderer
+      opacity:.9, renderer: svgRenderer
     }).addTo(meLayer);
 
     meLayer.eachLayer(l => l.bringToFront && l.bringToFront());
@@ -3234,7 +3787,7 @@ async function locateOnceAnimated() {
 
     L.circleMarker(latlng, {
       radius: 12, color: '#fff', weight: 3, fillColor: 'transparent',
-      opacity: .9, renderer: fastRenderer
+      opacity: .9, renderer: svgRenderer
     }).addTo(meLayer);
 
     meLayer.eachLayer(l => l.bringToFront && l.bringToFront());
@@ -3421,7 +3974,7 @@ async function loadNearestCityThenReturn(lat, lng, zoom = 18){
       }).addTo(meLayer);
       L.circleMarker([lat, lng], {
         radius: 12, color:'#fff', weight:3, fillColor:'transparent',
-        opacity:.9, renderer: fastRenderer
+        opacity:.9, renderer: svgRenderer
       }).addTo(meLayer);
       meLayer.eachLayer(l => l.bringToFront && l.bringToFront());
     }
