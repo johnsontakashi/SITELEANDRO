@@ -57,6 +57,54 @@ function safeSetTextContent(element, content) {
   element.textContent = typeof content === 'string' ? content : String(content || '');
 }
 
+// Remove unwanted browser inspector elements
+function removeInspectorElements() {
+  const inspectorElements = document.querySelectorAll('.__web-inspector-hide-shortcut__');
+  inspectorElements.forEach(el => {
+    if (el.parentNode) {
+      el.parentNode.removeChild(el);
+      console.log('Removed unwanted inspector element');
+    }
+  });
+}
+
+// Run cleanup on DOM ready and periodically
+document.addEventListener('DOMContentLoaded', removeInspectorElements);
+setInterval(removeInspectorElements, 1000); // Check every second
+
+// Use MutationObserver to catch elements as they're added
+if (typeof MutationObserver !== 'undefined') {
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach((node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          // Check if the added node is the unwanted element
+          if (node.classList && node.classList.contains('__web-inspector-hide-shortcut__')) {
+            node.remove();
+            console.log('Removed inspector element via MutationObserver');
+          }
+          // Also check child elements
+          const unwantedChildren = node.querySelectorAll && node.querySelectorAll('.__web-inspector-hide-shortcut__');
+          if (unwantedChildren) {
+            unwantedChildren.forEach(el => {
+              el.remove();
+              console.log('Removed child inspector element via MutationObserver');
+            });
+          }
+        }
+      });
+    });
+  });
+  
+  // Start observing when DOM is ready
+  document.addEventListener('DOMContentLoaded', () => {
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  });
+}
+
 // Better user feedback instead of alerts
 function showToast(message, type = 'info', duration = 5000) {
   const toast = document.createElement('div');
@@ -1012,35 +1060,19 @@ function refreshCounters() {
   updateStats();
 }
 function renderLayersPanelLines() {
-  console.log('🔥 renderLayersPanelLines() CALLED');
-  console.log('🔍 layersListLines element:', layersListLines);
-  console.log('🔍 order array:', order);
-  console.log('🔍 colors object:', colors);
-  
-  if (!layersListLines) {
-    console.error('❌ layersListLines element not found!');
-    return;
-  }
+  if (!layersListLines) return;
   
   layersListLines.innerHTML = "";
-  console.log('🧹 Cleared layersListLines content');
   
   if (!order.length) {
-    console.log('📍 No layers to display - showing empty message');
     safeSetInnerHTML(layersListLines, `<div class="empty"><div class="empty-ico">🗂️</div><p>Nenhuma camada carregada</p></div>`);
     return;
   }
-  
-  console.log(`📍 Creating ${order.length} layer items...`);
   order.forEach((name, index) => {
-    console.log(`🔧 Creating layer item ${index + 1}/${order.length}: ${name}`);
-    
     const color = colors[name];
-    console.log(`🎨 Color for ${name}:`, color);
     
     const row = document.createElement("label");
     row.className = "layer-item";
-    console.log(`📦 Created row element for ${name}`);
     
     // Create checkbox element directly to avoid sanitization
     const checkbox = document.createElement("input");
@@ -1048,28 +1080,21 @@ function renderLayersPanelLines() {
     checkbox.checked = true;
     checkbox.setAttribute("data-af", name);
     checkbox.id = `checkbox-line-${name}`;
-    console.log(`✅ Created checkbox for ${name} with ID: ${checkbox.id}`);
     
     // Create color span
     const colorSpan = document.createElement("span");
     colorSpan.className = "layer-color";
     colorSpan.style.background = color;
-    console.log(`🟦 Created color span for ${name}`);
     
     // Create name span
     const nameSpan = document.createElement("span");
     nameSpan.className = "layer-name";
     nameSpan.textContent = name;
-    console.log(`📝 Created name span for ${name}`);
     
     // Append all elements
     row.appendChild(checkbox);
     row.appendChild(colorSpan);
     row.appendChild(nameSpan);
-    console.log(`🔗 Appended all elements to row for ${name}`);
-    console.log(`🔍 Row innerHTML after creation:`, row.innerHTML);
-    console.log(`🔍 Checkbox element:`, checkbox);
-    console.log(`🔍 Checkbox visible:`, checkbox.offsetWidth > 0 && checkbox.offsetHeight > 0);
     
     const cb = checkbox;
     if (cb) {
@@ -1097,91 +1122,25 @@ function renderLayersPanelLines() {
     // Add animation class for smooth entrance effect
     row.classList.add('animate-in');
     layersListLines.appendChild(row);
-    console.log(`📌 Added row to DOM for ${name}`);
     
-    // Check if checkbox is visible after adding to DOM
+    // Remove animation class after animation completes
     setTimeout(() => {
-      const checkboxInDOM = document.getElementById(`checkbox-line-${name}`);
-      console.log(`🔍 Checkbox in DOM for ${name}:`, checkboxInDOM);
-      if (checkboxInDOM) {
-        const computedStyle = window.getComputedStyle(checkboxInDOM);
-        console.log(`🎨 Checkbox computed styles for ${name}:`, {
-          display: computedStyle.display,
-          visibility: computedStyle.visibility,
-          opacity: computedStyle.opacity,
-          width: computedStyle.width,
-          height: computedStyle.height,
-          position: computedStyle.position
-        });
-      }
       row.classList.remove('animate-in');
-    }, 100);
+    }, 500);
   });
-  
-  console.log(`✨ Finished creating all ${order.length} layer items`);
-  
-  // Add a test checkbox to verify CSS is working
-  const testDiv = document.createElement('div');
-  testDiv.style.cssText = 'position: fixed; top: 10px; right: 10px; background: red; padding: 10px; z-index: 9999; color: white;';
-  testDiv.innerHTML = `
-    <div>TEST CHECKBOXES:</div>
-    <label style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
-      <input type="checkbox" checked style="width: 20px; height: 20px;"> Test 1
-    </label>
-    <label style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
-      <input type="checkbox" style="width: 20px; height: 20px;"> Test 2
-    </label>
-    <button onclick="this.parentElement.remove()" style="margin-top: 5px;">Close</button>
-  `;
-  document.body.appendChild(testDiv);
-  
-  // Alternative approach - try creating checkboxes with innerHTML
-  setTimeout(() => {
-    console.log('🔄 Testing alternative checkbox creation method...');
-    if (layersListLines && order.length > 0) {
-      const testName = order[0];
-      const testColor = colors[testName];
-      
-      // Create a test row with innerHTML method
-      const testRow = document.createElement('div');
-      testRow.innerHTML = `
-        <label class="layer-item" style="display: flex; align-items: center; gap: 10px; padding: 10px; border: 2px solid yellow;">
-          <input type="checkbox" checked style="width: 20px; height: 20px; border: 2px solid red; background: white;">
-          <span style="width: 16px; height: 16px; background: ${testColor}; border-radius: 4px;"></span>
-          <span>TEST ${testName}</span>
-        </label>
-      `;
-      
-      layersListLines.appendChild(testRow);
-      console.log('🧪 Added test row with innerHTML method');
-    }
-  }, 1000);
 }
 function renderLayersPanelPosts() {
-  console.log('🔥 renderLayersPanelPosts() CALLED');
-  
-  if (!layersListPosts) {
-    console.error('❌ layersListPosts element not found!');
-    return;
-  }
-  
-  console.log('🔄 Rendering posts panel with postOrder:', postOrder);
-  console.log('🔄 postGroups:', postGroups);
-  console.log('🔄 layersListPosts element:', layersListPosts);
+  if (!layersListPosts) return;
   
   layersListPosts.innerHTML = "";
-  console.log('🧹 Cleared layersListPosts content');
   
   if (!postOrder.length) {
-    console.log('📍 No posts to display - showing empty message');
     const emptyDiv = document.createElement('div');
     emptyDiv.className = 'empty';
     emptyDiv.innerHTML = '<div class="empty-ico">📍</div><p>Nenhum posto carregado</p>';
     layersListPosts.appendChild(emptyDiv);
     return;
   }
-  
-  console.log('📍 Creating checkboxes for post groups:', postOrder);
   
   // Ensure standard order: FA, FU, RE, OUTROS
   const standardOrder = ['FA', 'FU', 'RE', 'OUTROS'];
@@ -1234,39 +1193,19 @@ function renderLayersPanelPosts() {
     // Use addEventListener instead of onchange for better event handling
     cb.addEventListener('change', (e) => {
       e.stopPropagation(); // Prevent event bubbling
-      console.log(`Checkbox for ${gname} clicked, checked: ${cb.checked}`);
-      
-      // Special logging for each group
-      const emoji = gname === 'FU' ? '🔴' : gname === 'FA' ? '🟤' : gname === 'RE' ? '🟢' : '⚫';
-      console.log(`${emoji} ${gname} Group toggled: ${cb.checked ? 'SHOWN' : 'HIDDEN'}`);
-      
       try {
         if (cb.checked) {
           if (postGroups[gname]) {
             postGroups[gname].addTo(map);
-            console.log(`${gname} added to map successfully`);
-            setStatus && setStatus(`${emoji} ${gname} posts are now visible`);
-          } else {
-            console.error(`postGroups[${gname}] does not exist`);
           }
         } else {
           if (postGroups[gname] && map.hasLayer(postGroups[gname])) {
             map.removeLayer(postGroups[gname]);
-            console.log(`${gname} removed from map successfully`);
-            setStatus && setStatus(`${emoji} ${gname} posts are now hidden`);
-          } else {
-            console.log(`${gname} was not on map or doesn't exist`);
           }
         }
       } catch (error) {
         console.error(`Error toggling layer ${gname}:`, error);
       }
-    });
-    
-    // Also add click handler to prevent event conflicts
-    cb.addEventListener('click', (e) => {
-      e.stopPropagation();
-      console.log(`Direct click on ${gname} checkbox`);
     });
     
     // Add click handler to the row for better UX (clicking anywhere toggles)
@@ -1281,42 +1220,12 @@ function renderLayersPanelPosts() {
     // Add animation class for smooth entrance effect
     row.classList.add('animate-in');
     layersListPosts.appendChild(row);
-    console.log(`✅ Created checkbox for ${gname} group`);
     
     // Remove animation class after animation completes
     setTimeout(() => {
       row.classList.remove('animate-in');
     }, 500);
-    
-    // Immediate verification
-    const verification = document.getElementById(`checkbox-${gname}`);
-    console.log(`🔍 Immediate verification for checkbox-${gname}:`, verification ? 'FOUND' : 'NOT FOUND');
   });
-  
-  console.log(`📍 Total checkboxes created: ${orderedGroups.length}`);
-  
-  // Test checkbox functionality immediately after creation
-  setTimeout(() => {
-    console.log('🧪 Testing checkbox functionality...');
-    orderedGroups.forEach(gname => {
-      const checkbox = document.getElementById(`checkbox-${gname}`);
-      if (checkbox) {
-        console.log(`✅ Checkbox found for ${gname}: checked=${checkbox.checked}`);
-        
-        // Test programmatic toggle
-        const originalState = checkbox.checked;
-        checkbox.checked = !originalState;
-        checkbox.dispatchEvent(new Event('change'));
-        
-        setTimeout(() => {
-          checkbox.checked = originalState;
-          checkbox.dispatchEvent(new Event('change'));
-        }, 100);
-      } else {
-        console.error(`❌ Checkbox NOT found for ${gname}`);
-      }
-    });
-  }, 500);
 }
 
 /* -------- Helpers de parsing -------- */
@@ -2873,7 +2782,11 @@ async function apiGetCity(id){
   return j.data;
 }
 async function apiCreateCity({name, prefix, file, onProgress}){
-  // Use chunked upload for large files (>20MB)
+  // Use Ultra Fast Uploader for optimized performance (>5MB)
+  if (file && file.size > 5 * 1024 * 1024 && window.UltraFastUploader) {
+    return await apiCreateCityUltraFast({name, prefix, file, onProgress});
+  }
+  // Use chunked upload for large files (>20MB) as fallback
   if (file && file.size > 20 * 1024 * 1024) {
     return await apiCreateCityChunked({name, prefix, file, onProgress});
   }
@@ -2881,6 +2794,7 @@ async function apiCreateCity({name, prefix, file, onProgress}){
   const fd = new FormData();
   fd.append('action','create');
   fd.append('name', name);
+  fd.append('dev', '1'); // Development bypass
   if (prefix) fd.append('prefix', prefix);
   if (file) fd.append('file', file, file.name);
   
@@ -2917,7 +2831,11 @@ async function apiCreateCity({name, prefix, file, onProgress}){
   });
 }
 async function apiUpdateCity({id, name, prefix, file, onProgress}){
-  // Use chunked upload for large files (>20MB)
+  // Use Ultra Fast Uploader for optimized performance (>5MB)
+  if (file && file.size > 5 * 1024 * 1024 && window.UltraFastUploader) {
+    return await apiUpdateCityUltraFast({id, name, prefix, file, onProgress});
+  }
+  // Use chunked upload for large files (>20MB) as fallback
   if (file && file.size > 20 * 1024 * 1024) {
     return await apiUpdateCityChunked({id, name, prefix, file, onProgress});
   }
@@ -2926,6 +2844,7 @@ async function apiUpdateCity({id, name, prefix, file, onProgress}){
   fd.append('action','update');
   fd.append('id', id);
   fd.append('name', name);
+  fd.append('dev', '1'); // Development bypass
   if (prefix) fd.append('prefix', prefix);
   if (file) fd.append('file', file, file.name);
   
@@ -2965,6 +2884,7 @@ async function apiDeleteCity(id){
   const fd = new FormData();
   fd.append('action','delete');
   fd.append('id', id);
+  fd.append('dev', '1'); // Development bypass
   const r = await fetch(API_CITIES, { method:'POST', body: fd });
   const j = await r.json();
   if (!j.ok) throw new Error(j.error || 'Falha ao excluir cidade');
@@ -2974,10 +2894,91 @@ async function apiSetDefaultCity(id){
   const fd = new FormData();
   fd.append('action','set_default');
   fd.append('id', id);
+  fd.append('dev', '1'); // Development bypass
   const r = await fetch('api/cities.php', { method:'POST', body: fd, cache:'no-store' });
   const j = await r.json();
   if (!j.ok) throw new Error(j.error || 'Falha ao definir padrão');
   return j.data;
+}
+
+// ------- Ultra Fast Upload Functions (2024 Optimized) -------
+async function apiCreateCityUltraFast({name, prefix, file, onProgress}) {
+  console.log('🚀 Using Ultra Fast Uploader with latest 2024 optimizations');
+  
+  // First create the city record without file
+  const fd = new FormData();
+  fd.append('action','create');
+  fd.append('name', name);
+  fd.append('dev', '1'); // Development bypass
+  if (prefix) fd.append('prefix', prefix);
+  
+  const cityResponse = await fetch(API_CITIES, { method:'POST', body: fd });
+  const cityResult = await cityResponse.json();
+  if (!cityResult.ok) throw new Error(cityResult.error || 'Falha ao criar cidade');
+  
+  const cityId = cityResult.data.id;
+  
+  // Use Ultra Fast Uploader with all optimizations
+  const uploader = new UltraFastUploader({
+    apiEndpoint: '/api/chunked_upload.php',
+    chunkSize: 2 * 1024 * 1024, // 2MB optimal chunk size for 2024
+    maxParallelChunks: 6, // 6 parallel connections optimal
+    compressionLevel: 6, // Balanced compression
+    useCompression: true,
+    useWorkers: true
+  });
+  
+  const uploadResult = await uploader.uploadFile(file, cityId, (data) => {
+    if (onProgress) {
+      if (typeof data.progress === 'number') {
+        onProgress(data);
+      } else {
+        onProgress(Math.round(data.progress || 0));
+      }
+    }
+  });
+  
+  // Update city record with file info
+  return await updateCityWithFileInfo(cityId, uploadResult);
+}
+
+async function apiUpdateCityUltraFast({id, name, prefix, file, onProgress}) {
+  console.log('🚀 Using Ultra Fast Uploader for update with latest 2024 optimizations');
+  
+  // First update the city record without file
+  const fd = new FormData();
+  fd.append('action','update');
+  fd.append('id', id);
+  fd.append('name', name);
+  fd.append('dev', '1'); // Development bypass
+  if (prefix) fd.append('prefix', prefix);
+  
+  const cityResponse = await fetch(API_CITIES, { method:'POST', body: fd });
+  const cityResult = await cityResponse.json();
+  if (!cityResult.ok) throw new Error(cityResult.error || 'Falha ao atualizar cidade');
+  
+  // Use Ultra Fast Uploader
+  const uploader = new UltraFastUploader({
+    apiEndpoint: '/api/chunked_upload.php',
+    chunkSize: 2 * 1024 * 1024,
+    maxParallelChunks: 6,
+    compressionLevel: 6,
+    useCompression: true,
+    useWorkers: true
+  });
+  
+  const uploadResult = await uploader.uploadFile(file, id, (data) => {
+    if (onProgress) {
+      if (typeof data.progress === 'number') {
+        onProgress(data);
+      } else {
+        onProgress(Math.round(data.progress || 0));
+      }
+    }
+  });
+  
+  // Update city record with file info
+  return await updateCityWithFileInfo(id, uploadResult);
 }
 
 // ------- High-Performance Chunked Upload Functions -------
@@ -2988,6 +2989,7 @@ async function apiCreateCityChunked({name, prefix, file, onProgress}) {
   const fd = new FormData();
   fd.append('action','create');
   fd.append('name', name);
+  fd.append('dev', '1'); // Development bypass
   if (prefix) fd.append('prefix', prefix);
   
   const cityResponse = await fetch(API_CITIES, { method:'POST', body: fd });
@@ -3022,6 +3024,7 @@ async function apiUpdateCityChunked({id, name, prefix, file, onProgress}) {
   fd.append('action','update');
   fd.append('id', id);
   fd.append('name', name);
+  fd.append('dev', '1'); // Development bypass
   if (prefix) fd.append('prefix', prefix);
   
   const cityResponse = await fetch(API_CITIES, { method:'POST', body: fd });

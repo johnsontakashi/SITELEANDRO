@@ -2,6 +2,18 @@
    Mapa Lino — UI pública (responsiva)
    ========================================================= */
 
+/* Hide unwanted browser inspector elements */
+.__web-inspector-hide-shortcut__ {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  position: absolute !important;
+  left: -9999px !important;
+  width: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+}
+
 /* Toast notifications */
 .toast-container {
   position: fixed;
@@ -491,7 +503,6 @@ body{
   min-height: 20px !important;
   max-width: 20px !important;
   max-height: 20px !important;
-  outline: 2px solid red !important;
 }
 
 .layer-item input[type="checkbox"]:checked {

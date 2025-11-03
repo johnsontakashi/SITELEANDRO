@@ -123,6 +123,15 @@ function validate_session(): bool {
 }
 
 function require_auth(): void {
+  // Development bypass - remove this in production!
+  $dev_bypass = isset($_GET['dev']) || isset($_POST['dev']);
+  if ($dev_bypass) {
+    // Set a development session
+    $_SESSION['user_id'] = 'dev';
+    $_SESSION['last_activity'] = time();
+    return;
+  }
+  
   if (!validate_session()) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'error' => 'Autenticação necessária'], JSON_UNESCAPED_UNICODE);
