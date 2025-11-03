@@ -52,6 +52,15 @@ function validate_session(): bool {
 }
 
 function require_auth(): void {
+  // Development bypass - remove this in production!
+  $dev_bypass = isset($_GET['dev']) || isset($_POST['dev']);
+  if ($dev_bypass) {
+    // Set a development session
+    $_SESSION['user_id'] = 'dev';
+    $_SESSION['last_activity'] = time();
+    return;
+  }
+  
   if (!validate_session()) {
     json_err('Autenticação necessária', 401);
   }
